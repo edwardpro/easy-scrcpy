@@ -69,6 +69,7 @@ class Settings:
     audio: bool = True
     disable_debug_on_stop: bool = False
     video_bit_rate: int = 8
+    audio_bit_rate: int = 128
     device_quality: dict = field(default_factory=dict)
 
     @classmethod
@@ -90,6 +91,8 @@ class Settings:
         if result.language not in LANGUAGES:
             raise ValueError(tr("不支持的语言：{language}", language=result.language))
         if not 1 <= result.video_bit_rate <= 100:
+            raise ValueError(tr("画质参数超出范围"))
+        if not 16 <= result.audio_bit_rate <= 512:
             raise ValueError(tr("画质参数超出范围"))
         for serial, quality in result.device_quality.items():
             if not isinstance(serial, str):
@@ -132,6 +135,8 @@ def scrcpy_arguments(device: Device, settings: Settings) -> list[str]:
         args.append(f"--max-size={quality['max_size']}")
     if not settings.audio:
         args.append("--no-audio")
+    else:
+        args.append(f"--audio-bit-rate={quality['audio_bit_rate']}K")
     return args
 
 
@@ -141,6 +146,10 @@ QUALITY_PRESETS = {
     "high": {"max_size": 0, "max_fps": 60, "video_bit_rate": 16},
 }
 QUALITY_LABELS = {"default": "跟随全局设置", "smooth": "流畅", "standard": "标准", "high": "高清", "custom": "自定义"}
+RESOLUTION_OPTIONS = (0, 640, 800, 1024, 1280, 1440, 1920, 2560, 3840)
+FPS_OPTIONS = (15, 24, 30, 45, 60, 90, 120)
+VIDEO_BIT_RATE_OPTIONS = (1, 2, 4, 5, 8, 10, 12, 16, 24, 32)
+AUDIO_BIT_RATE_OPTIONS = (64, 96, 128, 192, 256, 320)
 
 
 def validate_quality(quality):
@@ -151,6 +160,10 @@ def validate_quality(quality):
             value = quality.get(key)
             if type(value) is not int or not low <= value <= high:
                 raise ValueError(tr("画质参数超出范围"))
+        if "audio_bit_rate" in quality:
+            value = quality["audio_bit_rate"]
+            if type(value) is not int or not 16 <= value <= 512:
+                raise ValueError(tr("画质参数超出范围"))
 
 
 def device_quality(serial: str, settings: Settings) -> dict:
@@ -158,8 +171,8 @@ def device_quality(serial: str, settings: Settings) -> dict:
     validate_quality(selection)
     profile = selection["profile"]
     if profile == "custom":
-        return dict(selection)
+        return {"audio_bit_rate": settings.audio_bit_rate, **selection}
     if profile in QUALITY_PRESETS:
-        return {"profile": profile, **QUALITY_PRESETS[profile]}
+        return {"profile": profile, "audio_bit_rate": settings.audio_bit_rate, **QUALITY_PRESETS[profile]}
     return {"profile": "default", "max_size": settings.max_size, "max_fps": settings.max_fps,
-            "video_bit_rate": settings.video_bit_rate}
+            "video_bit_rate": settings.video_bit_rate, "audio_bit_rate": settings.audio_bit_rate}

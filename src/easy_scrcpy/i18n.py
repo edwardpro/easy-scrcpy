@@ -6,6 +6,10 @@ _language = "zh"
 
 # Chinese source text, then English / French / German / Japanese.
 ROWS = [
+    ("重新投屏", "Restart", "Redémarrer", "Neustarten", "再起動"),
+    ("通知权限…", "Notification permissions…", "Autorisations de notification…", "Benachrichtigungsrechte…", "通知の許可…"),
+    ("设备通知不可用：{error}", "Device notifications unavailable: {error}", "Notifications indisponibles : {error}", "Gerätebenachrichtigungen nicht verfügbar: {error}", "デバイス通知は利用できません：{error}"),
+    ("音频码率", "Audio bit rate", "Débit audio", "Audio-Bitrate", "音声ビットレート"),
     ("画质", "Quality", "Qualité", "Bildqualität", "画質"),
     ("跟随全局设置", "Global settings", "Paramètres globaux", "Globale Einstellungen", "全体設定に従う"),
     ("流畅", "Smooth", "Fluide", "Flüssig", "スムーズ"),
@@ -130,8 +134,10 @@ def tr(source: str, **values) -> str:
 
 def translate_widget(root):
     """Remember Chinese static widget sources to permit repeated live switching."""
-    from PySide6.QtWidgets import QWidget, QLabel, QAbstractButton, QLineEdit, QSpinBox, QTabWidget, QTableWidget
+    from PySide6.QtWidgets import QWidget, QLabel, QAbstractButton, QLineEdit, QSpinBox, QTabWidget, QTableWidget, QComboBox
     for widget in [root, *root.findChildren(QWidget)]:
+        if isinstance(widget, QComboBox) and widget.property("i18n_original_resolution"):
+            widget.setItemText(widget.findData(0), tr("原始分辨率"))
         attributes = [("windowTitle", "setWindowTitle")]
         if isinstance(widget, (QLabel, QAbstractButton)):
             attributes.append(("text", "setText"))

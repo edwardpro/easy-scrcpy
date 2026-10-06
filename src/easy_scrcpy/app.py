@@ -16,14 +16,8 @@ from .mirroring import MirroringManager
 from .monitor import DeviceMonitor
 from .ui import ControlWindow, SettingsDialog, QualityDialog, STATE_LABELS
 from .i18n import tr, set_language, translate_widget, translate_message_buttons
-
-
-def icon_path(name: str) -> Path:
-    if getattr(sys, "frozen", False):
-        root = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
-    else:
-        root = Path(__file__).resolve().parents[2]
-    return root / "assets" / name
+from .runtime import icon_path
+from .notifications import DeviceNotifications
 
 
 def app_icon() -> QIcon:
@@ -93,6 +87,9 @@ class Controller(QObject):
         self.window = ControlWindow(icon)
         self.manager = MirroringManager(settings, self)
         self.monitor = DeviceMonitor(settings, self)
+        self.notifications = DeviceNotifications(self)
+        self.notifications.action.connect(self.notification_action)
+        self.notifications.log.connect(self.log)
         self.tray = QSystemTrayIcon(tray_icon(), self)
         self.menu = QMenu()
         self.tray.setContextMenu(self.menu)
@@ -170,6 +167,8 @@ class Controller(QObject):
         self.menu.addSeparator()
         self.menu.addAction(tr("停止全部投屏"), self.manager.request_stop_all).setEnabled(bool(self.manager.processes))
         self.menu.addAction(tr("设置…"), self.open_settings)
+        if sys.platform in {"darwin", "win32"}:
+            self.menu.addAction(tr("通知权限…"), self.notifications.request_permission)
         self.menu.addAction(tr("退出"), self.quit)
 
     def on_snapshot(self, devices):
@@ -190,6 +189,7 @@ class Controller(QObject):
                     self.tray.showMessage(tr("请在手机上授权 USB 调试"), device.label,
                                           QSystemTrayIcon.MessageIcon.Information)
         self.refresh()
+        self.notifications.sync(devices)
         if self.settings.prompt_on_connect:
             for device in ready:
                 if device.serial not in self.manager.processes:
@@ -222,6 +222,22 @@ class Controller(QObject):
         device = self.presence.devices.get(serial)
         if device is not None:
             self.manager.start(device)
+
+    def notification_action(self, serial, action):
+        if self.quitting:
+            return
+        device = self.presence.devices.get(serial)
+        if device is None or device.state != "device":
+            return
+        if action == "restart":
+            if serial in self.manager.processes:
+                self.manager.restart(device)
+            else:
+                self.manager.start(device)
+        elif action == "stop":
+            self.manager.request_stop(serial)
+        elif action == "settings":
+            self.open_quality(serial)
 
     def restart_device(self, device):
         current = self.presence.devices.get(device.serial)
@@ -300,6 +316,7 @@ class Controller(QObject):
         dialog.activateWindow()
 
     def apply_settings(self, settings):
+        language_changed = settings.language != self.settings.language
         self.settings = settings
         self.monitor.settings = settings
         self.manager.settings = settings
@@ -317,6 +334,8 @@ class Controller(QObject):
         for dialog in self.dialogs:
             translate_message_buttons(dialog)
         self.refresh()
+        if language_changed:
+            self.notifications.refresh_language(list(self.presence.devices.values()))
         self.monitor.scan()
         self.log(tr("设置已保存；新的投屏参数在下一次启动时生效。"))
 
@@ -346,6 +365,7 @@ class Controller(QObject):
         if self.quitting:
             return
         self.quitting = True
+        self.notifications.shutdown()
         self.monitor.stop()
         self.manager.shutdown()
         self.tray.hide()

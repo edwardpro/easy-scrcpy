@@ -6,6 +6,14 @@ import platform
 import sys
 
 
+def icon_path(name: str) -> Path:
+    if getattr(sys, "frozen", False):
+        root = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+    else:
+        root = Path(__file__).resolve().parents[2]
+    return root / "assets" / name
+
+
 def host_target() -> str:
     arch = platform.machine().lower()
     arch = {"amd64": "x86_64", "arm64": "aarch64"}.get(arch, arch)

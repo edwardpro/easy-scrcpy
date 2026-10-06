@@ -4,6 +4,11 @@ Save the supplied artwork here:
 
 - `icon.png`: large square application icon (recommended 1024 × 1024).
 - `tray-icon.png`: small square tray icon (recommended 64 × 64).
+- `menu-start-share.png` / `menu-stop-share.png`: icons for per-device Start / Stop
+  buttons in the main panel. Displayed at 24 × 24 inside centered 40 × 40 buttons,
+  with translated tooltips and accessible names. Device rows are at least 56 px high.
+- `menu-config.png`: per-device quality configuration icon, displayed at 24 × 24
+  inside a 40 × 40 button matching the Start / Stop controls.
 - `tray-icon-mac.png`: monochrome macOS tray artwork. White areas become
   transparent at runtime; black areas form a template automatically tinted by
   macOS for light / dark menu bars. Windows and Ubuntu use `tray-icon.png`.

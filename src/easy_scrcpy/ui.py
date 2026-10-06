@@ -1,19 +1,34 @@
 from dataclasses import replace
 
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Signal, Qt, QSize
 from PySide6.QtGui import QCloseEvent, QIcon
 from PySide6.QtWidgets import (
     QCheckBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout,
-    QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QSpinBox,
+    QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton,
     QTabWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
-    QAbstractItemView, QHeaderView, QComboBox,
+    QAbstractItemView, QHeaderView, QComboBox, QToolButton, QStyle,
 )
 
-from .core import Settings, resolve_executable, QUALITY_LABELS, device_quality
+from .core import (Settings, resolve_executable, QUALITY_LABELS, device_quality,
+                   RESOLUTION_OPTIONS, FPS_OPTIONS, VIDEO_BIT_RATE_OPTIONS, AUDIO_BIT_RATE_OPTIONS)
 from .i18n import LANGUAGES, tr, translate_widget
+from .runtime import icon_path
 
 STATE_LABELS = {"device": "已就绪", "unauthorized": "请在手机上授权", "offline": "离线",
-                "no permissions": "缺少 USB 权限（检查 udev 规则）"}
+                 "no permissions": "缺少 USB 权限（检查 udev 规则）"}
+
+
+def option_combo(options, current, suffix="", original=False):
+    combo = QComboBox()
+    combo.setEditable(False)
+    # Preserve a valid saved value from older releases without silently replacing it.
+    values = sorted(set(options) | {current})
+    for value in values:
+        combo.addItem(tr("原始分辨率") if original and value == 0 else f"{value}{suffix}", value)
+    combo.setCurrentIndex(combo.findData(current))
+    if original:
+        combo.setProperty("i18n_original_resolution", True)
+    return combo
 
 
 class ControlWindow(QWidget):
@@ -29,7 +44,8 @@ class ControlWindow(QWidget):
         super().__init__()
         self.setWindowTitle("Easy Scrcpy")
         self.setWindowIcon(icon)
-        self.resize(1000, 540)
+        self.resize(1120, 580)
+        self.setMinimumSize(860, 460)
         self.device_view_key = None
         self.tray_available = True
         layout = QVBoxLayout(self)
@@ -45,7 +61,17 @@ class ControlWindow(QWidget):
         devices_layout = QVBoxLayout(devices_tab)
         self.table = QTableWidget(0, 5)
         self.table.setHorizontalHeaderLabels(["设备", "序列号", "状态", "画质", "操作"])
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        header = self.table.horizontalHeader()
+        header.setMinimumSectionSize(72)
+        for column in (0, 1, 2):
+            header.setSectionResizeMode(column, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(4, 80)
+        self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
+        self.table.verticalHeader().setDefaultSectionSize(56)
+        self.table.verticalHeader().setMinimumSectionSize(56)
+        self.table.verticalHeader().hide()
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         devices_layout.addWidget(self.table)
@@ -85,27 +111,56 @@ class ControlWindow(QWidget):
             state = tr("正在停止…" if device.serial in manager.stopping else "投屏中" if running else STATE_LABELS.get(device.state, device.state))
             for column, text in enumerate((device.model.replace("_", " "), device.serial, state)):
                 self.table.setItem(row, column, QTableWidgetItem(text))
-            button = QPushButton(tr("停止投屏" if running else "开始投屏"))
+            label = tr("停止投屏" if running else "开始投屏")
+            button = QToolButton()
+            button.setObjectName("mirrorActionButton")
+            button.setFixedSize(40, 40)
+            button.setIconSize(QSize(24, 24))
+            button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+            icon = QIcon(str(icon_path("menu-stop-share.png" if running else "menu-start-share.png")))
+            if icon.isNull():
+                icon = self.style().standardIcon(QStyle.StandardPixmap.SP_MediaStop if running else QStyle.StandardPixmap.SP_MediaPlay)
+            button.setIcon(icon)
+            button.setToolTip(label)
+            button.setAccessibleName(label)
             button.setEnabled(device.serial not in manager.stopping and (running or device.state == "device"))
             signal = self.stop_requested if running else self.start_requested
             button.clicked.connect(lambda checked=False, s=device.serial, target=signal: target.emit(s))
             quality = device_quality(device.serial, manager.settings)
             container = QWidget()
             layout = QHBoxLayout(container)
-            layout.setContentsMargins(2, 0, 2, 0)
+            layout.setContentsMargins(6, 6, 6, 6)
+            layout.setSpacing(6)
             combo = QComboBox()
+            combo.setMinimumWidth(150)
+            combo.setMinimumHeight(32)
             for profile, label in QUALITY_LABELS.items():
                 combo.addItem(tr(label), profile)
             combo.setCurrentIndex(combo.findData(quality["profile"]))
             combo.setToolTip(tr("画质参数：最大边长 {size}，{fps} FPS，{bitrate} Mbps", size=quality["max_size"] or tr("原始分辨率"), fps=quality["max_fps"], bitrate=quality["video_bit_rate"]))
             combo.activated.connect(lambda index, s=device.serial, c=combo: self.quality_requested.emit(s, c.itemData(index)))
             layout.addWidget(combo)
-            edit = QPushButton(tr("调整…"))
+            edit = QToolButton()
+            edit.setObjectName("qualityConfigButton")
+            edit.setFixedSize(40, 40)
+            edit.setIconSize(QSize(24, 24))
+            edit.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+            config_icon = QIcon(str(icon_path("menu-config.png")))
+            if config_icon.isNull():
+                config_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView)
+            edit.setIcon(config_icon)
+            edit.setToolTip(tr("调整…"))
+            edit.setAccessibleName(tr("自定义画质"))
             edit.clicked.connect(lambda checked=False, s=device.serial: self.custom_quality_requested.emit(s))
             layout.addWidget(edit)
             container.setEnabled(device.serial not in manager.stopping)
             self.table.setCellWidget(row, 3, container)
-            self.table.setCellWidget(row, 4, button)
+            action_cell = QWidget()
+            action_layout = QHBoxLayout(action_cell)
+            action_layout.setContentsMargins(6, 6, 6, 6)
+            action_layout.addWidget(button, alignment=Qt.AlignmentFlag.AlignCenter)
+            self.table.setCellWidget(row, 4, action_cell)
+        self.table.resizeColumnToContents(3)
 
     def retranslate(self):
         self.device_view_key = None
@@ -162,22 +217,18 @@ class SettingsDialog(QDialog):
         warning = QLabel("默认关闭。部分手机会拒绝；成功后影响该手机的所有 ADB 连接，下次需在手机上手动开启 USB 调试。")
         warning.setWordWrap(True)
         form.addRow(warning)
-        self.size = QSpinBox()
-        self.size.setRange(0, 8192)
-        self.size.setSpecialValueText("原始分辨率")
-        self.size.setValue(controller.settings.max_size)
+        self.size = option_combo(RESOLUTION_OPTIONS, controller.settings.max_size, " px", original=True)
         form.addRow("最大画面边长", self.size)
-        self.fps = QSpinBox()
-        self.fps.setRange(1, 240)
-        self.fps.setValue(controller.settings.max_fps)
+        self.fps = option_combo(FPS_OPTIONS, controller.settings.max_fps, " FPS")
         form.addRow("最大帧率", self.fps)
-        self.bitrate = QSpinBox()
-        self.bitrate.setRange(1, 100)
-        self.bitrate.setSuffix(" Mbps")
-        self.bitrate.setValue(controller.settings.video_bit_rate)
+        self.bitrate = option_combo(VIDEO_BIT_RATE_OPTIONS, controller.settings.video_bit_rate, " Mbps")
         form.addRow("视频码率", self.bitrate)
+        self.audio_bitrate = option_combo(AUDIO_BIT_RATE_OPTIONS, controller.settings.audio_bit_rate, " kbps")
+        form.addRow("音频码率", self.audio_bitrate)
         self.audio = QCheckBox("转发音频（需要 Android 11 或更高）")
         self.audio.setChecked(controller.settings.audio)
+        self.audio_bitrate.setEnabled(self.audio.isChecked())
+        self.audio.toggled.connect(self.audio_bitrate.setEnabled)
         form.addRow("音频", self.audio)
         note = QLabel("关闭窗口仍会常驻托盘。投屏参数修改对下一次启动生效。\n"
                       "自启动使用当前安装位置；移动应用或虚拟环境后请重新设置。")
@@ -203,9 +254,9 @@ class SettingsDialog(QDialog):
                 return
         settings = replace(self.controller.settings, adb_path=self.adb.text().strip(),
                            scrcpy_path=self.scrcpy.text().strip(), prompt_on_connect=self.prompt.isChecked(),
-                           max_size=self.size.value(), max_fps=self.fps.value(), audio=self.audio.isChecked(),
+                            max_size=self.size.currentData(), max_fps=self.fps.currentData(), audio=self.audio.isChecked(),
                            language=self.language.currentData(), disable_debug_on_stop=self.disable_debug.isChecked(),
-                           video_bit_rate=self.bitrate.value())
+                            video_bit_rate=self.bitrate.currentData(), audio_bit_rate=self.audio_bitrate.currentData())
         previous_autostart = None
         try:
             if self.autostart.isEnabled():
@@ -236,20 +287,15 @@ class QualityDialog(QDialog):
         form = QFormLayout()
         layout.addLayout(form)
         quality = device_quality(device.serial, settings)
-        self.size = QSpinBox()
-        self.size.setRange(0, 8192)
-        self.size.setSpecialValueText("原始分辨率")
-        self.size.setValue(quality["max_size"])
+        self.size = option_combo(RESOLUTION_OPTIONS, quality["max_size"], " px", original=True)
         form.addRow("最大画面边长", self.size)
-        self.fps = QSpinBox()
-        self.fps.setRange(1, 240)
-        self.fps.setValue(quality["max_fps"])
+        self.fps = option_combo(FPS_OPTIONS, quality["max_fps"], " FPS")
         form.addRow("最大帧率", self.fps)
-        self.bitrate = QSpinBox()
-        self.bitrate.setRange(1, 100)
-        self.bitrate.setSuffix(" Mbps")
-        self.bitrate.setValue(quality["video_bit_rate"])
+        self.bitrate = option_combo(VIDEO_BIT_RATE_OPTIONS, quality["video_bit_rate"], " Mbps")
         form.addRow("视频码率", self.bitrate)
+        self.audio_bitrate = option_combo(AUDIO_BIT_RATE_OPTIONS, quality["audio_bit_rate"], " kbps")
+        self.audio_bitrate.setEnabled(settings.audio)
+        form.addRow("音频码率", self.audio_bitrate)
         note = QLabel("修改画质会重启该设备投屏，不会关闭 USB 调试；只影响投屏画面，不修改手机屏幕分辨率。")
         note.setWordWrap(True)
         layout.addWidget(note)
@@ -262,5 +308,5 @@ class QualityDialog(QDialog):
         translate_widget(self)
 
     def quality(self):
-        return {"profile": "custom", "max_size": self.size.value(), "max_fps": self.fps.value(),
-                "video_bit_rate": self.bitrate.value()}
+        return {"profile": "custom", "max_size": self.size.currentData(), "max_fps": self.fps.currentData(),
+                "video_bit_rate": self.bitrate.currentData(), "audio_bit_rate": self.audio_bitrate.currentData()}

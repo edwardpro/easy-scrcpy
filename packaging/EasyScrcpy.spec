@@ -1,6 +1,7 @@
 # Build on each target OS with: python -m PyInstaller packaging/EasyScrcpy.spec
 from pathlib import Path
 import sys
+from PyInstaller.utils.hooks import collect_submodules
 
 root = Path(SPECPATH).parent
 sys.path.insert(0, str(root / "src"))
@@ -20,8 +21,13 @@ data = [(str(p), str(Path("runtime") / p.relative_to(runtime).parent))
 data += [(str(p), "assets") for p in (root / "assets").glob("*.png")]
 if icons:
     data.append((str(icons / "icon.png"), "assets/linux"))
+native_imports = []
+if sys.platform == "win32":
+    native_imports = collect_submodules("windows_toasts") + collect_submodules("winrt")
+elif sys.platform == "darwin":
+    native_imports = ["UserNotifications", "Foundation", "objc"]
 a = Analysis([str(root / "packaging/launcher.py")], pathex=[str(root / "src")],
-             binaries=[], datas=data, hiddenimports=[], hookspath=[], hooksconfig={},
+             binaries=[], datas=data, hiddenimports=native_imports, hookspath=[], hooksconfig={},
              runtime_hooks=[], excludes=[], noarchive=False)
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="EasyScrcpy", debug=False,

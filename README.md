@@ -14,6 +14,8 @@ See the [screenshot gallery](wiki/README.md) for the device panel, tray menu, mi
 
 ## Features
 
+On Windows and packaged macOS apps, authorized USB devices can each have a native notification showing the device name, with Restart, Stop and Settings actions. Restart restarts / starts that device's mirror; Stop follows the optional USB-debugging shutdown setting; Settings opens its quality options. Use the tray's **Notification permissions…** action to request macOS access or open Windows notification settings. No permission prompt is shown automatically. Notifications are removed on disconnect / app exit; stale actions cannot control a reconnected device. The app must remain running. OS settings, Focus modes and notification layouts may hide or collapse actions; these are not permanent always-visible controls. Ubuntu does not use this feature.
+
 - Runs in the menu bar / system tray. Closing the panel keeps the app running; quitting stops all mirroring sessions started by this app.
 - Asynchronously detects USB Android devices through ADB every 2 seconds. Wi-Fi devices and emulators are not treated as USB devices.
 - Asks whether to start mirroring once a device is authorized, only once per connection. You can also start manually after declining.
@@ -27,6 +29,8 @@ See the [screenshot gallery](wiki/README.md) for the device panel, tray menu, mi
 - English, Simplified Chinese, French, German, and Japanese. Defaults to the system language, falling back to English for other languages. Choose **Settings → Language** and save to update the interface, tray menu, and pending mirroring prompts immediately, without restarting. Historical logs and raw scrcpy / ADB output are not translated.
 
 ## Requirements
+
+Resolution, FPS, video bit rate and audio bit rate use non-editable dropdowns in Settings and Custom quality. Resolution options: original, 640, 800, 1024, 1280, 1440, 1920, 2560, 3840 px (maximum image dimension); FPS: 15, 24, 30, 45, 60, 90, 120; video: 1, 2, 4, 5, 8, 10, 12, 16, 24, 32 Mbps; audio: 64, 96, 128, 192, 256, 320 kbps. Previously saved non-preset values are retained as additional choices. Audio bit rate applies only when audio forwarding is enabled.
 
 The packaged app does **not** require a separate Python, ADB, or scrcpy installation. Development and building require Python 3.10+. Your phone must run Android 5.0 or later, with developer options and **USB debugging** enabled. Authorize the computer's RSA key on the phone when connecting for the first time. Audio forwarding requires Android 11 or later.
 
@@ -131,6 +135,8 @@ This is an unofficial GUI. Copyright and licenses for scrcpy and related compone
 
 ## 功能
 
+Windows 和已打包的 macOS 应用支持每个已授权 USB 设备一条原生通知，显示设备名称，提供 Restart（重新投屏）、Stop（停止投屏）、Settings（该设备画质设置）操作。Restart 重启或启动该设备投屏；Stop 遵循可选关闭 USB 调试设置。托盘“通知权限…”可申请 macOS 权限或打开 Windows 系统通知设置，不自动弹权限申请。断开和退出时移除通知，旧通知不会控制重新连接的设备。应用需保持运行，系统设置、专注模式和通知布局可能隐藏或折叠按钮，不保证通知永久可见。Ubuntu 不启用此功能。
+
 - 菜单栏 / 系统托盘常驻，关闭面板不退出；通过“退出”停止所有由本应用启动的投屏。
 - 每 2 秒通过 ADB 异步检测 USB Android 设备，不把 Wi-Fi 设备和模拟器作为 USB 设备。
 - 设备完成授权后询问是否投屏，同一次连接只询问一次；拒绝后可手动启动。
@@ -144,6 +150,8 @@ This is an unofficial GUI. Copyright and licenses for scrcpy and related compone
 - 英语、简体中文、法语、德语、日语；默认跟随系统（其他系统语言回退英语）。在“设置 → 语言”选择，保存后立即更新界面 / 托盘 / 待确认投屏弹窗，无需重启。历史日志和 scrcpy / ADB 原始输出不翻译。
 
 ## 前置条件
+
+设置页和自定义画质均使用不可输入的下拉选项：分辨率为原始、640、800、1024、1280、1440、1920、2560、3840 px（最大画面边长）；帧率为 15、24、30、45、60、90、120 FPS；视频码率为 1、2、4、5、8、10、12、16、24、32 Mbps；音频码率为 64、96、128、192、256、320 kbps。旧版保存的非预设值会保留为额外选项，避免静默修改。音频码率仅在启用音频转发时生效。
 
 安装打包应用不需要 Python、ADB 或 scrcpy。开发 / 构建需要 Python 3.10+。手机 Android 5.0+，开启开发者选项与 **USB 调试**，首次连接在手机上确认电脑 RSA 授权。音频转发需要 Android 11+。
 

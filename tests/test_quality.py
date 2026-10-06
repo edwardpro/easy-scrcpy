@@ -7,7 +7,8 @@ import unittest
 from unittest.mock import patch
 
 from easy_scrcpy.app import Controller
-from easy_scrcpy.core import Device, Settings, device_quality, scrcpy_arguments
+from easy_scrcpy.core import Device, Settings, device_quality, scrcpy_arguments, RESOLUTION_OPTIONS
+from easy_scrcpy.ui import QualityDialog, option_combo
 from easy_scrcpy.i18n import set_language
 from easy_scrcpy.mirroring import MirroringManager
 from easy_scrcpy.monitor import DeviceMonitor
@@ -15,6 +16,23 @@ from test_qt import APP, wait_until
 
 
 class QualityTests(unittest.TestCase):
+    def test_dropdowns_noneditable_and_legacy_values_preserved(self):
+        combo = option_combo(RESOLUTION_OPTIONS, 1777, " px", original=True)
+        self.assertFalse(combo.isEditable())
+        self.assertEqual(combo.currentData(), 1777)
+        self.assertNotEqual(combo.findData(1920), -1)
+        dialog = QualityDialog(Device("a", "device", usb=True), Settings(), None)
+        try:
+            for widget in (dialog.size, dialog.fps, dialog.bitrate, dialog.audio_bitrate):
+                self.assertFalse(widget.isEditable())
+            dialog.audio_bitrate.setCurrentIndex(dialog.audio_bitrate.findData(192))
+            settings = Settings(device_quality={"a": dialog.quality()})
+            self.assertIn("--audio-bit-rate=192K", scrcpy_arguments(Device("a", "device"), settings))
+            self.assertFalse(any(arg.startswith("--audio-bit-rate") for arg in scrcpy_arguments(
+                Device("a", "device"), replace(settings, audio=False))))
+        finally:
+            dialog.deleteLater()
+
     def tearDown(self):
         set_language("zh")
         APP.processEvents()
@@ -57,8 +75,8 @@ class QualityTests(unittest.TestCase):
                 self.assertEqual(combo.currentData(), "smooth")
                 controller.open_quality("a")
                 dialog = controller.quality_dialogs["a"]
-                dialog.size.setValue(1440)
-                dialog.bitrate.setValue(10)
+                dialog.size.setCurrentIndex(dialog.size.findData(1440))
+                dialog.bitrate.setCurrentIndex(dialog.bitrate.findData(10))
                 dialog.accept()
                 self.assertEqual(controller.settings.device_quality["a"]["max_size"], 1440)
             finally:
