@@ -17,6 +17,7 @@
 - `tests/`：unittest 单元测试及无界面 Qt 集成测试。
 - `.github/workflows/`：三平台测试、手动触发打包。
 - `.coding/`：必须保留的需求迭代记录，随源码提交。
+- `changelogs/`：每个发布版本的双语变更日志，文件名与标签一致（`V0.2.0.md`），随源码提交。
 
 ## 工具链和常用命令
 
@@ -108,6 +109,7 @@ uv run --extra build python packaging/update_scrcpy.py --version 5.0 --all-targe
 - 至少运行相关测试，交付前尽量运行完整测试及 `git diff --check`；明确说明没有验证的系统、设备和原生行为。
 - 只有用户要求打包时才以最新代码重新打包；保留构建产物在忽略目录中。
 - 源码、原始图标、截图、锁文件、迭代文档提交到 Git；`dist/`、`build/`、`vendor/`、`.cache/`、`.venv/` 不提交。
+- 每个分支在合并 / 打标签前，必须把该分支的最终变更写入 `changelogs/`：文件名与标签一致（`V0.2.0.md`，大写 `V`），头部记录发布日期、标签提交与覆盖的提交范围，条目中英双语并按“新增 / Added”“修复 / Fixed”“变更 / Changed”分组。版本号未定时先写 `changelogs/unreleased.md`，打标签时重命名；已发布版本的文件只追加勘误，不改写既有结论。变更日志与源码一起提交，不得加入 `.gitignore`，不写入密钥、令牌或设备真实序列号。
 - 不擅自提交、推送、移动标签或创建 Release；用户要求后执行，并检查远程当前状态。标签大小写敏感，项目使用 `V0.1.1` 这类大写 `V` 标签。
 - 用户要求更新已有标签时，优先使用准确旧对象值的 `--force-with-lease`，避免覆盖他人的并发变更。
 - 当前打包工作流是 `workflow_dispatch`，产物上传 Actions Artifacts，**不是自动上传 Release**。标签 / Release 更新不会自动替换运行包。
