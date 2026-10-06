@@ -87,6 +87,7 @@ uv run --extra build python packaging/update_scrcpy.py --version 5.0 --all-targe
 - 用参数数组启动 `QProcess`，不把设备序列号、路径或用户输入拼成 shell 命令。
 - 所有投屏明确指定 `--serial`，一设备一进程；只终止本应用启动的进程，不用全局 `pkill` / `taskkill`。`adb kill-server` 只允许在用户明确确认后执行（例如无线连接中 ADB 服务缺少 macOS 本地网络权限时的“重启 ADB 服务”），并先停止本应用投屏。
 - 无线连接只保留“IP 连接（已配对）”和“配对码连接（首次）”；配对端口与连接端口不同，ADB 的 pair / connect 退出码为 0 也可能失败，必须解析输出并用 `devices -l` 验证。macOS 包必须保留 `NSLocalNetworkUsageDescription` 和 `NSBonjourServices`。
+- 无线连接对话框必须异步显示 ADB 服务状态：用只读的 `host:version` 协议探测（`adb_status.py`）判断服务是否真的响应，正常显示绿色圆点和实际端点，失败或超时显示红色并提示点击“重启 ADB 服务”。探测本身不得启动、重启或终止 ADB 服务；端点遵循 `ADB_SERVER_SOCKET` / `ANDROID_ADB_SERVER_ADDRESS` / `ANDROID_ADB_SERVER_PORT`（默认 `localhost:5037`），用户确认重启后刷新状态，对话框关闭时停止定时器和套接字。
 - ADB 查询失败 / 超时保留之前设备状态，不当作所有设备拔出。
 - 停止超时才强制结束，避免 Qt 主线程长时间阻塞；进程、计时器和回调必须清理。
 - 画质修改只重启目标设备，不走关闭 USB 调试流程；拔线或退出取消待执行重启。

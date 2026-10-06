@@ -24,6 +24,7 @@
 - `git diff --check`：通过。
 - 未打包、未提交、未推送；未验证真实手机、Windows / Linux 原生界面和打包应用。
 - 后续用户要求本地打包：执行 `uv run --extra build python -m PyInstaller --noconfirm packaging/EasyScrcpy.spec` 成功，产物 `dist/EasyScrcpy.app`，macOS Apple Silicon arm64。首次因 uv 缓存权限失败，授权后重跑成功。未提交、未推送；打包应用实际无线功能待用户验证。
+- 提交前复核（offscreen 脚本直连本机真实 ADB 服务）：`server_endpoint(tool_environment())` 返回 `('localhost', 5037)`，探测结果为 `True localhost:5037`；把 `ADB_SERVER_SOCKET` 指向未监听的 `tcp:127.0.0.1:5039` 时返回 `False 127.0.0.1:5039`，且 `active` 复位。全量测试重跑 80 项通过，`git diff --check` 无输出。
 
 ## 实际变更
 - 新增 adb_status.py：独立只读异步 TCP 检查，3 秒超时，验证 host:version 响应。
