@@ -6,6 +6,9 @@ _language = "zh"
 
 # Chinese source text, then English / French / German / Japanese.
 ROWS = [
+    ('关于', 'About', 'À propos', 'Über', 'このアプリについて'),
+    ('版本：{version}', 'Version: {version}', 'Version : {version}', 'Version: {version}', 'バージョン：{version}'),
+    ('关闭', 'Close', 'Fermer', 'Schließen', '閉じる'),
     ('键盘输入…', 'Keyboard input…', 'Saisie au clavier…', 'Tastatureingabe…', 'キーボード入力…'),
     ('键盘输入', 'Keyboard input', 'Saisie au clavier', 'Tastatureingabe', 'キーボード入力'),
     ('键盘模式', 'Keyboard mode', 'Mode clavier', 'Tastaturmodus', 'キーボードモード'),

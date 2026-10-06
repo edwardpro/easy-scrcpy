@@ -13,9 +13,27 @@ from .core import (Settings, resolve_executable, QUALITY_LABELS, device_quality,
                    RESOLUTION_OPTIONS, FPS_OPTIONS, VIDEO_BIT_RATE_OPTIONS, AUDIO_BIT_RATE_OPTIONS, device_input)
 from .i18n import LANGUAGES, tr, translate_widget
 from .runtime import icon_path, tool_environment
+from . import __version__
 
 STATE_LABELS = {"device": "已就绪", "unauthorized": "请在手机上授权", "offline": "离线",
                  "no permissions": "缺少 USB 权限（检查 udev 规则）"}
+
+
+class AboutDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(tr("关于"))
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Easy Scrcpy"))
+        layout.addWidget(QLabel(tr("版本：{version}", version=__version__)))
+        repository = QLabel('Git: <a href="https://github.com/edwardpro/easy-scrcpy">https://github.com/edwardpro/easy-scrcpy</a>')
+        repository.setOpenExternalLinks(True)
+        layout.addWidget(repository)
+        close = QPushButton(tr("关闭"))
+        close.setAccessibleName(tr("关闭"))
+        close.clicked.connect(self.accept)
+        layout.addWidget(close, alignment=Qt.AlignmentFlag.AlignRight)
 
 
 def option_combo(options, current, suffix="", original=False):
@@ -52,6 +70,7 @@ class ControlWindow(QWidget):
     quality_requested = Signal(str, str)
     custom_quality_requested = Signal(str)
     wireless_requested = Signal()
+    disconnect_wireless_requested = Signal(str)
     orientation_requested = Signal(str, int)
     input_requested = Signal(str)
     hidden_to_tray = Signal()
@@ -179,12 +198,36 @@ class ControlWindow(QWidget):
             action_cell = QWidget()
             action_layout = QHBoxLayout(action_cell)
             action_layout.setContentsMargins(6, 6, 6, 6)
+            if not device.usb:
+                disconnect = QToolButton()
+                disconnect.setObjectName("disconnectWirelessButton")
+                disconnect.setFixedSize(40, 40)
+                disconnect.setIconSize(QSize(24, 24))
+                disconnect.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+                disconnect_icon = QIcon(str(icon_path("menu-close-conn.png")))
+                if disconnect_icon.isNull():
+                    disconnect_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_DialogCloseButton)
+                disconnect.setIcon(disconnect_icon)
+                disconnect.setToolTip(tr("断开无线连接"))
+                disconnect.setAccessibleName(tr("断开无线连接"))
+                disconnect.setEnabled(device.serial not in manager.stopping)
+                disconnect.clicked.connect(lambda checked=False, s=device.serial: self.disconnect_wireless_requested.emit(s))
+                action_layout.addWidget(disconnect, alignment=Qt.AlignmentFlag.AlignCenter)
             action_layout.addWidget(button, alignment=Qt.AlignmentFlag.AlignCenter)
-            input_button = QPushButton("键盘输入…")
-            input_button.setText(tr("键盘输入…"))
+            input_button = QToolButton()
+            input_button.setObjectName("keyboardSettingsButton")
+            input_button.setFixedSize(40, 40)
+            input_button.setIconSize(QSize(24, 24))
+            input_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+            input_icon = QIcon(str(icon_path("menu-kb-settings.png")))
+            if input_icon.isNull():
+                input_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView)
+            input_button.setIcon(input_icon)
+            input_button.setToolTip(tr("键盘输入…"))
+            input_button.setAccessibleName(tr("键盘输入…"))
             input_button.setEnabled(device.state == "device" and device.serial not in manager.stopping)
             input_button.clicked.connect(lambda checked=False, s=device.serial: self.input_requested.emit(s))
-            action_layout.addWidget(input_button)
+            action_layout.addWidget(input_button, alignment=Qt.AlignmentFlag.AlignCenter)
             self.table.setCellWidget(row, 5, action_cell)
         self.table.resizeColumnToContents(3)
         self.table.resizeColumnToContents(4)
