@@ -8,7 +8,7 @@ An independent GUI and system tray companion for [Genymobile/scrcpy](https://git
 
 ## In action
 
-![Easy Scrcpy running](wiki/images/running.png)
+![Easy Scrcpy running](wiki/images/multi-device.png)
 
 See the [screenshot gallery](wiki/README.md) for the device panel, tray menu, mirroring prompt, settings, and multiple-device mirroring.
 
@@ -142,7 +142,7 @@ This is an unofficial GUI. Copyright and licenses for scrcpy and related compone
 
 ## 运行演示
 
-![Easy Scrcpy 运行画面](wiki/images/running.png)
+![Easy Scrcpy running](wiki/images/multi-device.png)
 
 更多截图：查看 [运行截图文档](wiki/README.md)，包含设备面板、托盘菜单、投屏确认、设置及多设备投屏。
 

@@ -9,4 +9,5 @@ dist/
 vendor/
 .cache/
 .DS_Store
+*.iml
 .idea
