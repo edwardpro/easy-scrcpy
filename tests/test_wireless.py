@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from easy_scrcpy.core import Device, Presence, Settings
+from easy_scrcpy.i18n import tr
 from easy_scrcpy.wireless import (Discovery, WirelessConnection, endpoint, classify_failure,
                                   parse_mdns, pairing_qr_payload, new_pairing_credentials)
 from easy_scrcpy.wireless_ui import WirelessDialog
@@ -258,6 +259,27 @@ class WirelessTests(unittest.TestCase):
             finally:
                 connection.shutdown()
 
+    def test_qr_pairing_reports_stalled_mdns_discovery(self):
+        with tempfile.TemporaryDirectory() as temp:
+            # An ADB server that cannot browse mDNS answers with the header only.
+            script = Path(temp) / "adb.py"
+            script.write_text("print('List of discovered mdns services')\n", encoding="utf-8")
+            stalled, failures = [], []
+            connection = fake_connection(script, [])
+            connection.discovery_stalled.connect(lambda: stalled.append(True))
+            connection.failure.connect(lambda kind, detail: failures.append(kind))
+            try:
+                with patch("easy_scrcpy.wireless.resolve_executable", return_value=sys.executable), \
+                        patch("easy_scrcpy.wireless.POLL_DELAY_MS", 5), \
+                        patch("easy_scrcpy.wireless.MDNS_STALL_POLLS", 3):
+                    connection.pair_qr("easyscrcpy-test", "Secret123")
+                    wait_until(lambda: bool(stalled), timeout=5)
+                    self.assertEqual(len(stalled), 1)
+                    self.assertEqual(failures, [])
+                    self.assertTrue(connection.busy())
+            finally:
+                connection.shutdown()
+
     def test_paired_device_uses_mdns_port(self):
         with tempfile.TemporaryDirectory() as temp:
             script = Path(temp) / "adb.py"
@@ -317,10 +339,34 @@ class WirelessTests(unittest.TestCase):
             self.assertTrue(again.connect_button.isEnabled())
             again.show_failure("code", "Failed: Wrong password")
             self.assertIn("Wrong password", again.detail.text())
-            self.assertTrue(again.restart_button.isHidden())
+            self.assertFalse(again.restart_button.isHidden())
         finally:
             again.cleanup(0)
             again.deleteLater()
+
+    def test_dialog_explains_stalled_discovery_busy_clicks_and_restart(self):
+        controller = SimpleNamespace(window=None, settings=Settings(), presence=SimpleNamespace(devices={}))
+        with patch.object(WirelessConnection, "pair_qr"):
+            dialog = WirelessDialog(controller)
+            try:
+                self.assertFalse(dialog.restart_button.isHidden())
+                self.assertTrue(dialog.restart_button.toolTip())
+                dialog.connection.discovery_stalled.emit()
+                self.assertIn("mDNS", dialog.detail.text())
+                with patch.object(dialog, "start_qr_pairing") as resume:
+                    dialog.update_status("restarted")
+                    resume.assert_called_once()
+                    dialog.use_code.setChecked(True)
+                    dialog.update_status("restarted")
+                    resume.assert_called_once()
+                with patch.object(dialog.connection, "busy", return_value=True):
+                    dialog.connect_phone()
+                self.assertEqual(dialog.status.text(), tr("正在处理上一步无线操作，请稍候…"))
+                dialog.start_qr_pairing()
+                self.assertEqual(dialog.detail.text(), "")
+            finally:
+                dialog.cleanup(0)
+                dialog.deleteLater()
 
     def test_endpoints_and_transport_isolation(self):
         self.assertEqual(endpoint("192.168.1.20", "5555"), "192.168.1.20:5555")

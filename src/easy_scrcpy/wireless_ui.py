@@ -142,8 +142,8 @@ class WirelessDialog(QDialog):
         self.connect_button.clicked.connect(self.connect_phone)
         buttons.addWidget(self.connect_button)
         self.restart_button = QPushButton(tr("重启 ADB 服务"))
+        self.restart_button.setToolTip(tr("ADB 服务无法访问局域网（mDNS 发现失效）时使用；会短暂断开所有 ADB 设备。"))
         self.restart_button.clicked.connect(self.restart_adb)
-        self.restart_button.hide()
         buttons.addWidget(self.restart_button)
         cancel = QPushButton(tr("取消"))
         cancel.clicked.connect(self.reject)
@@ -157,6 +157,7 @@ class WirelessDialog(QDialog):
         self.connection.status.connect(self.update_status)
         self.connection.failure.connect(self.show_failure)
         self.connection.connected.connect(self.connected)
+        self.connection.discovery_stalled.connect(self.discovery_stalled)
         self.mode.currentIndexChanged.connect(self.mode_changed)
         self.use_code.toggled.connect(self.mode_changed)
         self.paired.currentIndexChanged.connect(self.mode_changed)
@@ -204,12 +205,11 @@ class WirelessDialog(QDialog):
         if self.connection.busy():
             self.connection.cancel()
         name, password = new_pairing_credentials()
-        self.pair_qr.setPixmap(qr_pixmap(pairing_qr_payload(name, password), 240))
         self.detail.clear()
-        self.restart_button.hide()
         try:
+            self.pair_qr.setPixmap(qr_pixmap(pairing_qr_payload(name, password), 240))
             self.connection.pair_qr(name, password)
-        except (ValueError, OSError) as error:
+        except (ValueError, OSError, ImportError) as error:
             self.status.setText(tr("连接失败") + f": {error}")
 
     # ----- paired devices / manual -----
@@ -242,9 +242,9 @@ class WirelessDialog(QDialog):
 
     def connect_phone(self):
         if self.connection.busy():
+            self.status.setText(tr("正在处理上一步无线操作，请稍候…"))
             return
         self.detail.clear()
-        self.restart_button.hide()
         try:
             if self.mode.currentData() == "pair":
                 endpoint(self.code_host.text(), self.pair_port.text())
@@ -277,6 +277,16 @@ class WirelessDialog(QDialog):
         self.connect_button.setEnabled(status in IDLE)
         if status in IDLE:
             self.forget_button.setEnabled(self.paired.currentData() is not None)
+        if status == "restarted" and not self.closed and self.mode.currentData() == "pair" \
+                and not self.use_code.isChecked():
+            self.start_qr_pairing()
+
+    def discovery_stalled(self):
+        if self.closed:
+            return
+        self.detail.setText(tr("长时间未发现任何无线调试设备：当前 ADB 服务的局域网发现（mDNS）可能已失效，"
+                               "常见于 ADB 服务由旧版本应用或其他工具启动。可点击“重启 ADB 服务”后重试，"
+                               "或勾选“无法扫码时改用配对码”。"))
 
     def show_failure(self, kind, detail):
         self.last_detail = detail
@@ -319,7 +329,6 @@ class WirelessDialog(QDialog):
             socket.abort()
             if not self.closed and self.probe is socket:
                 self.show_failure("adb_network", self.last_detail)
-                self.restart_button.show()
 
         socket.connected.connect(reachable)
         timer.timeout.connect(socket.abort)
@@ -336,7 +345,6 @@ class WirelessDialog(QDialog):
             return
         if self.connection.busy():
             self.connection.cancel()
-        self.restart_button.hide()
         # Stop our mirrors first; never apply the optional USB-debugging shutdown here.
         self.controller.manager.stop_all()
         try:

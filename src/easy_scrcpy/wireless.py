@@ -4,6 +4,7 @@ from collections import namedtuple
 from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import ipaddress
+import logging
 import re
 import secrets
 import string
@@ -19,6 +20,10 @@ from .i18n import tr
 PHASE_TIMEOUT_MS = 20000
 VERIFY_ATTEMPTS = 8
 QR_WAIT_ATTEMPTS = 180  # ~3 minutes for the user to open the scanner and scan
+POLL_DELAY_MS = 1000
+MDNS_STALL_POLLS = 10
+
+logger = logging.getLogger(__name__)
 
 MdnsService = namedtuple("MdnsService", "name kind address")
 
@@ -197,6 +202,7 @@ class WirelessConnection(QObject):
     connected = Signal(str, str, str, str)  # serial, guid, model, address
     disconnected = Signal(str)
     failure = Signal(str, str)
+    discovery_stalled = Signal()
 
     def __init__(self, settings, parent=None):
         super().__init__(parent)
@@ -222,6 +228,8 @@ class WirelessConnection(QObject):
         self.code = ""
         self.connect_tried = False
         self.attempts = 0
+        self.stalled = False
+        self.logged_phase = ""
 
     def busy(self):
         return bool(self.phase) or self.retry.isActive() or self.process.state() != QProcess.ProcessState.NotRunning
@@ -290,6 +298,9 @@ class WirelessConnection(QObject):
             self.code = ""
             raise ValueError("ADB not found")
         self.phase = phase
+        if phase != self.logged_phase:
+            self.logged_phase = phase
+            self._log(f"{phase}: {adb} {' '.join(arguments)}")
         self.process.setProgram(adb)
         self.process.setArguments(arguments)
         self.process.setProcessEnvironment(tool_environment())
@@ -308,8 +319,12 @@ class WirelessConnection(QObject):
             text = text.replace(self.code, "******")
         return text.strip()[-1500:]
 
+    def _log(self, text):
+        logger.info("wireless %s", self._sanitize(text))
+
     def _fail(self, output):
         detail = self._sanitize(output)
+        self._log(f"failed: {detail or '(no output)'}")
         self.code = ""
         self.status.emit("failed")
         self.failure.emit(classify_failure(detail), detail)
@@ -341,13 +356,23 @@ class WirelessConnection(QObject):
         text = output.lower()
         ok = code == 0 and status == QProcess.ExitStatus.NormalExit
         if phase == "find_pairing":
-            address = next((s.address for s in parse_mdns(output)
-                            if s.name == self.pair_name and s.kind == "pairing"), None)
+            services = parse_mdns(output)
+            address = next((s.address for s in services if s.name == self.pair_name and s.kind == "pairing"), None)
+            if self.attempts == 0:
+                self._log("mdns services: " + (", ".join(f"{s.name}/{s.kind}@{s.address}" for s in services)
+                                                or "(none)"))
             if address:
                 self._advance("pair", ["pair", address, self.code])
             elif self.attempts < QR_WAIT_ATTEMPTS:
                 self.attempts += 1
-                self._schedule("find_pairing", 1000)
+                # A phone with Wireless debugging on always advertises _adb-tls-connect._tcp,
+                # so a repeatedly empty list means this ADB server cannot browse mDNS at all
+                # (typically a stale server started by an older build or another tool).
+                if not services and not self.stalled and self.attempts >= MDNS_STALL_POLLS:
+                    self.stalled = True
+                    self._log("mdns returned no services; the ADB server may lack local network access")
+                    self.discovery_stalled.emit()
+                self._schedule("find_pairing", POLL_DELAY_MS)
             else:
                 self._fail("pairing QR code was not scanned in time")
         elif phase == "pair":
@@ -383,6 +408,7 @@ class WirelessConnection(QObject):
             self._advance("start", ["start-server"])
         elif phase == "start":
             if ok:
+                self._log("adb server restarted")
                 self.status.emit("restarted")
             else:
                 self._fail(output)
@@ -400,6 +426,7 @@ class WirelessConnection(QObject):
         device = next((d for d in parse_devices(output) if matches(d)), None) if ok else None
         if device and device.state == "device":
             address = self.target or ""
+            self._log(f"connected {device.serial}")
             self.status.emit("connected")
             self.connected.emit(device.serial, self.guid, device.model, address)
         elif device and device.state == "unauthorized":
@@ -426,6 +453,7 @@ class WirelessConnection(QObject):
             self._fail(str(error))
 
     def _timeout(self):
+        self._log(f"{self.phase or 'operation'} timed out after {PHASE_TIMEOUT_MS} ms")
         self.cancel()
         self.status.emit("timeout")
 
