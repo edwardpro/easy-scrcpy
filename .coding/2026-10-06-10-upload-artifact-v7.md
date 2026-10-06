@@ -46,4 +46,4 @@
   - v7 改为 ESM 实现，仅在 GitHub 托管 runner 上验证；自托管 runner 需具备对应 Node 运行时。
   - 上一次运行（`37474870821`）的三个 artifact 是嵌套 zip，仍可解压使用，但解压两次才能得到应用；如需要干净产物应重新触发构建。
 - 后续工作：重新触发 workflow_dispatch，确认无 warning、artifact 名与归档文件名一致、解压一次即可用且可执行权限保留。
-- 提交 / 发布信息：尚未提交。
+- 提交 / 发布信息：工作流、AGENTS.md、本文档与 `changelogs/unreleased.md` 被用户的 `118cc5d "update screenshot"` 一并提交并推送到 main（并行会话，未单独成提交）；随后按用户要求把该 Fixed 条目并入 `changelogs/V0.2.1.md`、删除 `unreleased.md`，并把标签 `V0.2.1` 用 `--force-with-lease=refs/tags/V0.2.1:4b9e61f…` 移到合并提交。未创建 Release；修复后的工作流尚未重新触发验证。
