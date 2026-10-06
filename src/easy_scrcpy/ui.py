@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView, QHeaderView, QComboBox, QToolButton, QStyle,
 )
 
-from .core import (Settings, resolve_executable, QUALITY_LABELS, device_quality,
+from .core import (Settings, resolve_executable, QUALITY_LABELS, device_quality, ORIENTATION_OPTIONS,
                    RESOLUTION_OPTIONS, FPS_OPTIONS, VIDEO_BIT_RATE_OPTIONS, AUDIO_BIT_RATE_OPTIONS)
 from .i18n import LANGUAGES, tr, translate_widget
 from .runtime import icon_path
@@ -31,6 +31,18 @@ def option_combo(options, current, suffix="", original=False):
     return combo
 
 
+def orientation_combo(current):
+    combo = QComboBox()
+    combo.setEditable(False)
+    values = sorted(set(ORIENTATION_OPTIONS) | {current})
+    for value in values:
+        combo.addItem(tr("默认") if value == 0 else f"{value}°", value)
+    combo.setCurrentIndex(combo.findData(current))
+    combo.setToolTip(tr("锁定捕获方向，手机物理旋转不会带动投屏画面；修改会重启该设备投屏。"))
+    combo.setAccessibleName(tr("方向"))
+    return combo
+
+
 class ControlWindow(QWidget):
     start_requested = Signal(str)
     stop_requested = Signal(str)
@@ -40,6 +52,7 @@ class ControlWindow(QWidget):
     quality_requested = Signal(str, str)
     custom_quality_requested = Signal(str)
     wireless_requested = Signal()
+    orientation_requested = Signal(str, int)
 
     def __init__(self, icon: QIcon):
         super().__init__()
@@ -60,15 +73,16 @@ class ControlWindow(QWidget):
         layout.addWidget(tabs)
         devices_tab = QWidget()
         devices_layout = QVBoxLayout(devices_tab)
-        self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(["设备", "序列号", "状态", "画质", "操作"])
+        self.table = QTableWidget(0, 6)
+        self.table.setHorizontalHeaderLabels(["设备", "序列号", "状态", "画质", "方向", "操作"])
         header = self.table.horizontalHeader()
         header.setMinimumSectionSize(72)
         for column in (0, 1, 2):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(4, 80)
+        for column in (3, 4):
+            header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(5, 80)
         self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
         self.table.verticalHeader().setDefaultSectionSize(56)
         self.table.verticalHeader().setMinimumSectionSize(56)
@@ -80,7 +94,7 @@ class ControlWindow(QWidget):
                       "未开启 USB 调试的手机可能不会出现在列表中。拒绝投屏后可在这里手动启动。")
         hint.setWordWrap(True)
         devices_layout.addWidget(hint)
-        quality_hint = QLabel("修改画质会重启该设备投屏，不会关闭 USB 调试；只影响投屏画面，不修改手机屏幕分辨率。")
+        quality_hint = QLabel("修改画质或方向会重启该设备投屏，不会关闭 USB 调试；只影响投屏画面，不修改手机屏幕。")
         quality_hint.setWordWrap(True)
         devices_layout.addWidget(quality_hint)
         tabs.addTab(devices_tab, "设备")
@@ -157,12 +171,17 @@ class ControlWindow(QWidget):
             layout.addWidget(edit)
             container.setEnabled(device.serial not in manager.stopping)
             self.table.setCellWidget(row, 3, container)
+            orientation = orientation_combo(manager.settings.device_orientation.get(device.serial, 0))
+            orientation.activated.connect(lambda index, s=device.serial, c=orientation: self.orientation_requested.emit(s, c.itemData(index)))
+            orientation.setEnabled(device.serial not in manager.stopping)
+            self.table.setCellWidget(row, 4, orientation)
             action_cell = QWidget()
             action_layout = QHBoxLayout(action_cell)
             action_layout.setContentsMargins(6, 6, 6, 6)
             action_layout.addWidget(button, alignment=Qt.AlignmentFlag.AlignCenter)
-            self.table.setCellWidget(row, 4, action_cell)
+            self.table.setCellWidget(row, 5, action_cell)
         self.table.resizeColumnToContents(3)
+        self.table.resizeColumnToContents(4)
 
     def retranslate(self):
         self.device_view_key = None

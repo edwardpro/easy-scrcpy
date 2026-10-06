@@ -11,7 +11,7 @@ from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
 from .autostart import Autostart
-from .core import Presence, Settings, resolve_executable, validate_quality
+from .core import Presence, Settings, resolve_executable, validate_quality, ORIENTATION_OPTIONS
 from .mirroring import MirroringManager
 from .monitor import DeviceMonitor
 from .ui import ControlWindow, SettingsDialog, QualityDialog, STATE_LABELS
@@ -107,6 +107,7 @@ class Controller(QObject):
         self.window.quality_requested.connect(self.select_quality)
         self.window.custom_quality_requested.connect(self.open_quality)
         self.window.wireless_requested.connect(self.open_wireless)
+        self.window.orientation_requested.connect(self.select_orientation)
         self.manager.restart_ready.connect(self.restart_device)
         self.manager.changed.connect(self.refresh)
         self.manager.error.connect(self.show_error)
@@ -379,6 +380,26 @@ class Controller(QObject):
         device = self.presence.devices.get(serial)
         if device and device.state == "device" and serial in self.manager.processes:
             self.log(tr("正在重启设备投屏以应用画质：{serial}", serial=serial))
+            self.manager.restart(device)
+
+    def select_orientation(self, serial, orientation):
+        if orientation not in ORIENTATION_OPTIONS or serial in self.manager.stopping:
+            self.window.device_view_key = None
+            self.refresh()
+            return
+        try:
+            selections = {**self.settings.device_orientation, serial: orientation}
+            settings = replace(self.settings, device_orientation=selections)
+            settings.save(self.config_path)
+        except (OSError, ValueError) as error:
+            self.window.device_view_key = None
+            self.refresh()
+            self.show_error(tr("无法保存设置") + "\n" + str(error))
+            return
+        self.apply_settings(settings)
+        device = self.presence.devices.get(serial)
+        if device and device.state == "device" and serial in self.manager.processes:
+            self.log(tr("正在重启设备投屏以应用方向：{serial}", serial=serial))
             self.manager.restart(device)
 
     def open_settings(self):
