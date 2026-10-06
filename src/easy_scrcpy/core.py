@@ -72,6 +72,7 @@ class Settings:
     audio_bit_rate: int = 128
     device_quality: dict = field(default_factory=dict)
     paired_devices: list = field(default_factory=list)
+    device_orientation: dict = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path) -> "Settings":
@@ -103,6 +104,9 @@ class Settings:
             if (not isinstance(record, dict) or not isinstance(record.get("guid"), str) or not record["guid"]
                     or any(not isinstance(record.get(k, ""), str) for k in ("name", "address", "paired_at"))):
                 raise ValueError(tr("设置类型错误：{key}", key="paired_devices"))
+        for serial, orientation in result.device_orientation.items():
+            if not isinstance(serial, str) or orientation not in ORIENTATION_OPTIONS:
+                raise ValueError(tr("方向参数超出范围"))
         return result
 
     def save(self, path: Path):
@@ -138,6 +142,9 @@ def scrcpy_arguments(device: Device, settings: Settings) -> list[str]:
             f"--max-fps={quality['max_fps']}", f"--video-bit-rate={quality['video_bit_rate']}M"]
     if quality["max_size"]:
         args.append(f"--max-size={quality['max_size']}")
+    orientation = settings.device_orientation.get(device.serial, 0)
+    if orientation:
+        args.append(f"--capture-orientation=@{orientation}")
     if not settings.audio:
         args.append("--no-audio")
     else:
@@ -151,6 +158,7 @@ QUALITY_PRESETS = {
     "high": {"max_size": 0, "max_fps": 60, "video_bit_rate": 16},
 }
 QUALITY_LABELS = {"default": "跟随全局设置", "smooth": "流畅", "standard": "标准", "high": "高清", "custom": "自定义"}
+ORIENTATION_OPTIONS = (0, 90, 180, 270)
 RESOLUTION_OPTIONS = (0, 640, 800, 1024, 1280, 1440, 1920, 2560, 3840)
 FPS_OPTIONS = (15, 24, 30, 45, 60, 90, 120)
 VIDEO_BIT_RATE_OPTIONS = (1, 2, 4, 5, 8, 10, 12, 16, 24, 32)
