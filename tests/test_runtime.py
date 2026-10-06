@@ -18,6 +18,18 @@ spec.loader.exec_module(prepare)
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_windows_license_normalized_without_removing_original(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            license_text = b"Original upstream license\r\n"
+            (root / "LICENSE.txt").write_bytes(license_text)
+            prepare.normalize_license(root)
+            self.assertEqual((root / "LICENSE").read_bytes(), license_text)
+            self.assertEqual((root / "LICENSE.txt").read_bytes(), license_text)
+            (root / "LICENSE").write_bytes(b"existing license")
+            prepare.normalize_license(root)
+            self.assertEqual((root / "LICENSE").read_bytes(), b"existing license")
+
     def test_windows_cp1252_console_handles_unicode(self):
         output = io.BytesIO()
         stream = io.TextIOWrapper(output, encoding="cp1252")

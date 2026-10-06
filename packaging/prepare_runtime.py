@@ -104,6 +104,12 @@ def validate(root: Path, target: str):
                 raise ValueError(f"缺少 ADB 配套文件：{name}")
 
 
+def normalize_license(bundle: Path):
+    """Windows releases use LICENSE.txt; preserve it and add a common alias."""
+    if not (bundle / "LICENSE").is_file() and (bundle / "LICENSE.txt").is_file():
+        shutil.copy2(bundle / "LICENSE.txt", bundle / "LICENSE")
+
+
 def prepare(target: str, cache: Path | None = None) -> Path:
     configure_console()
     lock = json.loads((ROOT / "packaging/dependencies.json").read_text(encoding="utf-8"))
@@ -137,6 +143,7 @@ def prepare(target: str, cache: Path | None = None) -> Path:
         extracted = staging / "scrcpy" / asset["asset"].removesuffix(".tar.gz").removesuffix(".zip")
         bundle = staging / "runtime"
         shutil.copytree(extracted, bundle)
+        normalize_license(bundle)
         # The official scrcpy release already includes the matching ADB binary and
         # Windows DLLs. Google's complete NOTICE is not included there: retain it.
         notices = bundle / "licenses"
