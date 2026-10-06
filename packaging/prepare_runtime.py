@@ -2,6 +2,7 @@
 
 import argparse
 import hashlib
+import http.client
 import json
 from pathlib import Path, PurePosixPath
 import shutil
@@ -9,6 +10,8 @@ import stat
 import sys
 import tarfile
 import tempfile
+import time
+import urllib.error
 import urllib.request
 import zipfile
 
@@ -44,14 +47,24 @@ def download(url: str, destination: Path, expected: str):
     configure_console()
     print(f"下载 {url}", flush=True)
     request = urllib.request.Request(url, headers={"User-Agent": "EasyScrcpy-build/0.1"})
-    try:
-        with urllib.request.urlopen(request, timeout=120) as response, partial.open("wb") as output:
-            shutil.copyfileobj(response, output)
-        if sha256(partial) != expected:
-            raise ValueError(f"SHA-256 校验失败：{destination.name}")
-        partial.replace(destination)
-    finally:
-        partial.unlink(missing_ok=True)
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response, partial.open("wb") as output:
+                shutil.copyfileobj(response, output)
+            if sha256(partial) != expected:
+                raise ValueError(f"SHA-256 校验失败：{destination.name}")
+            partial.replace(destination)
+            return
+        except (TimeoutError, ConnectionError, urllib.error.URLError, http.client.IncompleteRead) as error:
+            if isinstance(error, urllib.error.HTTPError) and error.code not in {408, 429, 500, 502, 503, 504}:
+                raise
+            if attempt == 2:
+                raise
+            delay = 2 ** (attempt + 1)
+            print(f"下载暂时失败（{type(error).__name__}），{delay} 秒后重试（{attempt + 2}/3）：{url}", flush=True)
+        finally:
+            partial.unlink(missing_ok=True)
+        time.sleep(delay)
 
 
 def safe_path(root: Path, member: str) -> Path:
