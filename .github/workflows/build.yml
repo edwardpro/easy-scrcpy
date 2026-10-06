@@ -49,8 +49,10 @@ jobs:
       - name: List archives
         shell: bash
         run: ls -l dist
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
+          # v7 direct upload: with archive=false the uploaded file name becomes
+          # the artifact name, so `name` is only a fallback for archive=true.
           name: ${{ steps.names.outputs.artifact }}
           path: ${{ steps.names.outputs.archive }}
           archive: false

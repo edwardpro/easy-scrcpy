@@ -115,5 +115,5 @@ uv run --extra build python packaging/update_scrcpy.py --version 5.0 --all-targe
 - 用户要求更新已有标签时，优先使用准确旧对象值的 `--force-with-lease`，避免覆盖他人的并发变更。
 - 当前打包工作流是 `workflow_dispatch`，产物上传 Actions Artifacts，**不是自动上传 Release**。标签 / Release 更新不会自动替换运行包。
 - 构建产物文件名固定为 `easyScrcpy-{platform}-{arch}-{version}.{ext}`：`platform` 取 `macos` / `windows` / `linux`，`arch` 由 `runner.arch` 小写得到（`arm64` / `x64`），`version` 读 `pyproject.toml` 的 `project.version`，`ext` 在 Linux 为 `tar.gz`、其余为 `zip`。发版前必须同步 `pyproject.toml` 与 `src/easy_scrcpy/__init__.py` 的版本号，否则产物名会带上旧版本。
-- 归档由各平台自己生成（macOS `ditto`、Linux `tar -czf`、Windows `tar -a -cf`），上传使用 `actions/upload-artifact` 的 `archive: false` 单文件模式：Actions 自己压缩不保留可执行权限，且会让下载得到多层 zip。
+- 归档由各平台自己生成（macOS `ditto`、Linux `tar -czf`、Windows `tar -a -cf`），上传使用 `actions/upload-artifact@v7` 的 `archive: false` 单文件模式：Actions 自己压缩不保留可执行权限，且会让下载得到多层 zip。`archive` 是 v7.0.0 新增输入，v6 会静默忽略（只报 warning）并再压一层，升级或降级该 action 时必须核对输入是否被支持。
 - 正式公开分发需复核签名 / 公证、第三方许可证、静态 LGPL 的源代码及可重链接材料，不将成功打包等同于完成发布合规。
