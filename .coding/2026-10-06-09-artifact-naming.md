@@ -32,7 +32,7 @@
 - `pyproject.toml`：`version` 0.1.0 → 0.2.1（本次沿用工作区已有修改）。
 - `src/easy_scrcpy/__init__.py`：`__version__` 0.1.0 → 0.2.1，与 pyproject 保持一致。
 - `AGENTS.md`：新增两条发布规约（产物命名与版本号同步要求、各平台自行归档 + `archive: false` 的原因）。
-- `changelogs/unreleased.md`：新建，记录本次变更（双语）。
+- `changelogs/unreleased.md`：新建记录本次变更（双语）；标签确定后按 AGENTS.md 规约把条目并入 `changelogs/V0.2.1.md` 并删除该文件。
 
 ## 验证记录
 - 执行命令：
@@ -53,6 +53,6 @@
   - 若 `windows-latest` 的 `tar.exe` 不支持写 zip，Windows 步骤会失败；备选方案是 `Compress-Archive -Path dist/EasyScrcpy -DestinationPath <archive>` 或 `python -m zipfile -c`。
   - Windows 产物结构由「散文件」变为「单个 zip，内含 `EasyScrcpy/` 目录」，解压后需进入该目录运行 `EasyScrcpy.exe`；`RELEASE_NOTES.md` 是 v0.1.0 的历史文件，按规约只追加勘误、不改写，如需澄清另建新版本说明。
   - 版本号唯一来源是 `pyproject.toml`，忘记同步会导致产物名带旧版本号；已在 AGENTS.md 写明。
-  - 标签 `V0.2.1` 指向的提交里 `pyproject.toml` 仍是 0.1.0，因此**在标签上触发构建会得到 `easyScrcpy-*-0.1.0.*`**；只有在包含本次版本号修改的提交上触发才会得到 0.2.1。若要产物名与 `V0.2.1` 标签一致，需要把版本号修改并入该标签指向的内容（重新打标签）或把下一个版本定为 0.2.2 后再打标签。此项需用户决定，本次未擅自移动标签。
+  - 标签 `V0.2.1` 原本指向 `0290d4b`，该提交里 `pyproject.toml` 仍是 0.1.0，在标签上构建会得到 `easyScrcpy-*-0.1.0.*`。用户确认后已把标签移到含版本号修改的提交（`20bd25d`，随后再移到变更日志合并提交），此风险已消除。
 - 后续工作：真实触发一次 workflow_dispatch 核对三个 Artifact 名与解压后可执行权限；如需要正式发布再评估切换到 Release 资产上传。
-- 提交 / 发布信息：尚未提交。
+- 提交 / 发布信息：工作流、版本号与文档修改已在 `20bd25d` 提交并推送到 main（该提交由并行会话完成）；标签 `V0.2.1` 经用户确认由 `0290d4b` 移到 `20bd25d`（`git push --force-with-lease=refs/tags/V0.2.1:d2d2c8c…`），变更日志合并后再次移到本文件所在提交（`--force-with-lease=refs/tags/V0.2.1:def352f…`）。未创建 Release，未触发 workflow_dispatch。
