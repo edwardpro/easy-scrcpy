@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QComboBox, QLi
                                QPushButton, QHBoxLayout, QWidget, QMessageBox, QCheckBox)
 
 from .i18n import tr, translate_message_buttons
+from .adb_status import AdbServerProbe
 from .wireless import (Discovery, WirelessConnection, endpoint, FAILURE_HINTS,
                        new_pairing_credentials, pairing_qr_payload)
 
@@ -56,6 +57,23 @@ class WirelessDialog(QDialog):
         self.discovery = Discovery(self)
         self.connection = WirelessConnection(controller.settings, self)
         layout = QVBoxLayout(self)
+        self.server_panel = QWidget()
+        self.server_panel.setObjectName("adbServerPanel")
+        self.server_panel.setStyleSheet("QWidget#adbServerPanel { border: 1px solid #888; border-radius: 6px; }")
+        server_row = QHBoxLayout(self.server_panel)
+        server_row.setContentsMargins(12, 10, 12, 10)
+        self.server_dot = QLabel()
+        self.server_dot.setFixedSize(10, 10)
+        self.server_status = wrapped(tr("正在检查 ADB 服务…"))
+        self.server_status.setTextFormat(Qt.TextFormat.PlainText)
+        server_row.addWidget(self.server_dot)
+        server_row.addWidget(self.server_status, 1)
+        self.server_probe = AdbServerProbe(self)
+        self.server_probe.result.connect(self.server_checked)
+        self.server_refresh = QTimer(self)
+        self.server_refresh.setInterval(5000)
+        self.server_refresh.timeout.connect(self.server_probe.check)
+        self.server_dot.setStyleSheet("background: #888; border-radius: 5px;")
 
         self.mode = QComboBox()
         self.mode.addItem(tr("首次配对"), "pair")
@@ -136,6 +154,7 @@ class WirelessDialog(QDialog):
         self.detail.setStyleSheet("color: #888;")
         layout.addWidget(self.detail)
         layout.addStretch()
+        layout.addWidget(self.server_panel)
 
         buttons = QHBoxLayout()
         self.connect_button = QPushButton(tr("确认并连接"))
@@ -169,8 +188,18 @@ class WirelessDialog(QDialog):
         self.mode.setCurrentIndex(self.mode.findData("paired" if controller.settings.paired_devices else "pair"))
         self.mode.blockSignals(False)
         self.mode_changed()
+        self.server_probe.check()
+        self.server_refresh.start()
 
     # ----- state -----
+    def server_checked(self, available, address):
+        if self.closed:
+            return
+        self.server_dot.setStyleSheet("background: " + ("#22a447" if available else "#d9534f") + "; border-radius: 5px;")
+        self.server_status.setText(tr("ADB 服务可用 · {address}", address=address) if available else
+                                   tr("ADB 服务异常 · {address}；建议点击“重启 ADB 服务”。", address=address))
+        self.server_dot.setAccessibleName(self.server_status.text())
+
     def load_paired(self, select=""):
         self.paired.blockSignals(True)
         self.paired.clear()
@@ -270,6 +299,8 @@ class WirelessDialog(QDialog):
 
     # ----- results -----
     def update_status(self, status):
+        if status == "restarted":
+            self.server_probe.check()
         self.status.setText(tr(STATUS_LABELS.get(status, status)))
         idle = status in IDLE or status == "find_pairing"
         for widget in self.controls:
@@ -354,6 +385,8 @@ class WirelessDialog(QDialog):
 
     def cleanup(self, result):
         self.closed = True
+        self.server_refresh.stop()
+        self.server_probe.stop()
         if self.probe is not None:
             self.probe.abort()
         self.discovery.stop()
