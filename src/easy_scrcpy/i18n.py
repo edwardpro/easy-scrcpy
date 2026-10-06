@@ -6,6 +6,9 @@ _language = "zh"
 
 # Chinese source text, then English / French / German / Japanese.
 ROWS = [
+    ("正在检查 ADB 服务…", "Checking ADB server…", "Vérification du serveur ADB…", "ADB-Server wird geprüft…", "ADBサービスを確認中…"),
+    ("ADB 服务可用 · {address}", "ADB server available · {address}", "Serveur ADB disponible · {address}", "ADB-Server verfügbar · {address}", "ADBサービス利用可能 · {address}"),
+    ("ADB 服务异常 · {address}；建议点击“重启 ADB 服务”。", "ADB server unavailable · {address}; try clicking “Restart ADB server”.", "Serveur ADB indisponible · {address} ; cliquez sur « Redémarrer ADB ».", "ADB-Server nicht verfügbar · {address}; bitte „ADB-Server neu starten“ klicken.", "ADBサービス異常 · {address}。「ADBサービスを再起動」を押してください。"),
     ("首次配对", "First-time pairing", "Première association", "Erstkopplung", "初回ペアリング"),
     ("连接已配对设备", "Connect a paired device", "Connecter un appareil associé", "Gekoppeltes Gerät verbinden", "ペアリング済み端末に接続"),
     ("重新生成配对二维码", "Regenerate pairing QR code", "Régénérer le QR code", "Kopplungs-QR-Code neu erstellen", "ペアリングQRコードを再生成"),

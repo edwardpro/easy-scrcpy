@@ -9,3 +9,4 @@ dist/
 vendor/
 .cache/
 .DS_Store
+.idea
