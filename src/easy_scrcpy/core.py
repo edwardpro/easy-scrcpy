@@ -1,4 +1,4 @@
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 import json
 import os
 from pathlib import Path
@@ -67,6 +67,9 @@ class Settings:
     max_size: int = 1920
     max_fps: int = 60
     audio: bool = True
+    disable_debug_on_stop: bool = False
+    video_bit_rate: int = 8
+    device_quality: dict = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path) -> "Settings":
@@ -86,6 +89,12 @@ class Settings:
             raise ValueError(tr("投屏分辨率或帧率设置超出范围"))
         if result.language not in LANGUAGES:
             raise ValueError(tr("不支持的语言：{language}", language=result.language))
+        if not 1 <= result.video_bit_rate <= 100:
+            raise ValueError(tr("画质参数超出范围"))
+        for serial, quality in result.device_quality.items():
+            if not isinstance(serial, str):
+                raise ValueError(tr("画质参数超出范围"))
+            validate_quality(quality)
         return result
 
     def save(self, path: Path):
@@ -116,10 +125,41 @@ def resolve_executable(name: str, configured: str = "") -> str | None:
 
 
 def scrcpy_arguments(device: Device, settings: Settings) -> list[str]:
+    quality = device_quality(device.serial, settings)
     args = [f"--serial={device.serial}", f"--window-title=Easy Scrcpy — {device.label}",
-            f"--max-fps={settings.max_fps}"]
-    if settings.max_size:
-        args.append(f"--max-size={settings.max_size}")
+            f"--max-fps={quality['max_fps']}", f"--video-bit-rate={quality['video_bit_rate']}M"]
+    if quality["max_size"]:
+        args.append(f"--max-size={quality['max_size']}")
     if not settings.audio:
         args.append("--no-audio")
     return args
+
+
+QUALITY_PRESETS = {
+    "smooth": {"max_size": 1024, "max_fps": 30, "video_bit_rate": 2},
+    "standard": {"max_size": 1920, "max_fps": 60, "video_bit_rate": 8},
+    "high": {"max_size": 0, "max_fps": 60, "video_bit_rate": 16},
+}
+QUALITY_LABELS = {"default": "跟随全局设置", "smooth": "流畅", "standard": "标准", "high": "高清", "custom": "自定义"}
+
+
+def validate_quality(quality):
+    if not isinstance(quality, dict) or quality.get("profile") not in QUALITY_LABELS:
+        raise ValueError(tr("画质参数超出范围"))
+    if quality["profile"] == "custom":
+        for key, low, high in (("max_size", 0, 8192), ("max_fps", 1, 240), ("video_bit_rate", 1, 100)):
+            value = quality.get(key)
+            if type(value) is not int or not low <= value <= high:
+                raise ValueError(tr("画质参数超出范围"))
+
+
+def device_quality(serial: str, settings: Settings) -> dict:
+    selection = settings.device_quality.get(serial, {"profile": "default"})
+    validate_quality(selection)
+    profile = selection["profile"]
+    if profile == "custom":
+        return dict(selection)
+    if profile in QUALITY_PRESETS:
+        return {"profile": profile, **QUALITY_PRESETS[profile]}
+    return {"profile": "default", "max_size": settings.max_size, "max_fps": settings.max_fps,
+            "video_bit_rate": settings.video_bit_rate}

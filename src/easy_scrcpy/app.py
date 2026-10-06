@@ -1,4 +1,5 @@
 import argparse
+from dataclasses import replace
 import logging
 from logging.handlers import RotatingFileHandler
 import os
@@ -10,10 +11,10 @@ from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
 from .autostart import Autostart
-from .core import Presence, Settings, resolve_executable
+from .core import Presence, Settings, resolve_executable, validate_quality
 from .mirroring import MirroringManager
 from .monitor import DeviceMonitor
-from .ui import ControlWindow, SettingsDialog, STATE_LABELS
+from .ui import ControlWindow, SettingsDialog, QualityDialog, STATE_LABELS
 from .i18n import tr, set_language, translate_widget, translate_message_buttons
 
 
@@ -47,6 +48,7 @@ class Controller(QObject):
         self.dialogs = set()
         self.prompts = {}
         self.settings_dialog = None
+        self.quality_dialogs = {}
         icon = app_icon()
         app.setWindowIcon(icon)
         self.window = ControlWindow(icon)
@@ -58,10 +60,13 @@ class Controller(QObject):
         self.tray.setToolTip("Easy Scrcpy")
         self.tray.activated.connect(self._activated)
         self.window.start_requested.connect(self.start_device)
-        self.window.stop_requested.connect(self.manager.stop)
-        self.window.stop_all_requested.connect(self.manager.stop_all)
+        self.window.stop_requested.connect(self.manager.request_stop)
+        self.window.stop_all_requested.connect(self.manager.request_stop_all)
         self.window.settings_requested.connect(self.open_settings)
         self.window.quit_requested.connect(self.quit)
+        self.window.quality_requested.connect(self.select_quality)
+        self.window.custom_quality_requested.connect(self.open_quality)
+        self.manager.restart_ready.connect(self.restart_device)
         self.manager.changed.connect(self.refresh)
         self.manager.error.connect(self.show_error)
         self.manager.log.connect(self.log)
@@ -118,13 +123,13 @@ class Controller(QObject):
             state = tr("正在停止" if device.serial in self.manager.stopping else "投屏中" if running else STATE_LABELS.get(device.state, device.state))
             submenu = self.menu.addMenu(f"{device.label} · {state}")
             if running:
-                action = submenu.addAction(tr("停止投屏"), lambda s=device.serial: self.manager.stop(s))
+                action = submenu.addAction(tr("停止投屏"), lambda s=device.serial: self.manager.request_stop(s))
                 action.setEnabled(device.serial not in self.manager.stopping)
             else:
                 action = submenu.addAction(tr("开始投屏"), lambda s=device.serial: self.start_device(s))
-                action.setEnabled(device.state == "device")
+                action.setEnabled(device.state == "device" and device.serial not in self.manager.stopping)
         self.menu.addSeparator()
-        self.menu.addAction(tr("停止全部投屏"), self.manager.stop_all).setEnabled(bool(self.manager.processes))
+        self.menu.addAction(tr("停止全部投屏"), self.manager.request_stop_all).setEnabled(bool(self.manager.processes))
         self.menu.addAction(tr("设置…"), self.open_settings)
         self.menu.addAction(tr("退出"), self.quit)
 
@@ -179,6 +184,64 @@ class Controller(QObject):
         if device is not None:
             self.manager.start(device)
 
+    def restart_device(self, device):
+        current = self.presence.devices.get(device.serial)
+        if current is not None and current.state == "device" and not self.quitting:
+            self.manager.start(current)
+
+    def select_quality(self, serial, profile):
+        if profile == "custom":
+            self.open_quality(serial)
+        else:
+            self.save_quality(serial, {"profile": profile})
+
+    def open_quality(self, serial):
+        device = self.presence.devices.get(serial)
+        if device is None or serial in self.manager.stopping:
+            return
+        if serial in self.quality_dialogs:
+            self.quality_dialogs[serial].raise_()
+            self.quality_dialogs[serial].activateWindow()
+            return
+        dialog = QualityDialog(device, self.settings, self.window)
+        self.quality_dialogs[serial] = dialog
+
+        def finished(result):
+            self.quality_dialogs.pop(serial, None)
+            if result == QualityDialog.DialogCode.Accepted and not self.quitting:
+                self.save_quality(serial, dialog.quality())
+            else:
+                self.window.device_view_key = None
+                self.refresh()
+            dialog.finished.disconnect()
+            dialog.deleteLater()
+
+        dialog.finished.connect(finished)
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def save_quality(self, serial, quality):
+        if serial in self.manager.stopping:
+            self.window.device_view_key = None
+            self.refresh()
+            return
+        try:
+            validate_quality(quality)
+            selections = {**self.settings.device_quality, serial: dict(quality)}
+            settings = replace(self.settings, device_quality=selections)
+            settings.save(self.config_path)
+        except (OSError, ValueError) as error:
+            self.window.device_view_key = None
+            self.refresh()
+            self.show_error(tr("无法保存设置") + "\n" + str(error))
+            return
+        self.apply_settings(settings)
+        device = self.presence.devices.get(serial)
+        if device and device.state == "device" and serial in self.manager.processes:
+            self.log(tr("正在重启设备投屏以应用画质：{serial}", serial=serial))
+            self.manager.restart(device)
+
     def open_settings(self):
         if self.settings_dialog is not None:
             self.settings_dialog.raise_()
@@ -202,7 +265,9 @@ class Controller(QObject):
         self.monitor.settings = settings
         self.manager.settings = settings
         set_language(settings.language)
-        translate_widget(self.window)
+        self.window.retranslate()
+        for dialog in self.quality_dialogs.values():
+            translate_widget(dialog)
         self.window.health.setText(tr(self.health_source))
         for serial, dialog in self.prompts.items():
             device = self.presence.devices.get(serial)

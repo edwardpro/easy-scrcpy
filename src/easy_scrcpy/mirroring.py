@@ -13,17 +13,21 @@ class MirroringManager(QObject):
     changed = Signal()
     error = Signal(str)
     log = Signal(str)
+    restart_ready = Signal(object)
 
     def __init__(self, settings: Settings, parent=None):
         super().__init__(parent)
         self.settings = settings
         self.processes: dict[str, QProcess] = {}
         self.stopping: set[str] = set()
+        self.terminating: set[str] = set()
+        self.debug_commands: dict[str, QProcess] = {}
+        self.restarts: dict[str, Device] = {}
         self.output: dict[str, deque[str]] = {}
         self.shutting_down = False
 
     def start(self, device: Device):
-        if device.serial in self.processes:
+        if device.serial in self.processes or device.serial in self.debug_commands:
             return
         if device.state != "device":
             self.error.emit(tr("设备尚未就绪，请在手机上开启 USB 调试并确认授权。"))
@@ -78,7 +82,9 @@ class MirroringManager(QObject):
     def _cleanup(self, serial, process):
         if self.processes.get(serial) is process:
             self.processes.pop(serial)
-            self.stopping.discard(serial)
+            if serial not in self.debug_commands:
+                self.stopping.discard(serial)
+            self.terminating.discard(serial)
             self.output.pop(serial, None)
         # Release closures retaining the QProcess wrapper before deferred deletion.
         process.readyReadStandardOutput.disconnect()
@@ -86,12 +92,18 @@ class MirroringManager(QObject):
         process.errorOccurred.disconnect()
         process.deleteLater()
         self.changed.emit()
+        device = self.restarts.pop(serial, None)
+        if device is not None and not self.shutting_down:
+            self.restart_ready.emit(device)
 
-    def stop(self, serial: str):
+    def stop(self, serial: str, *, restarting=False):
+        if not restarting:
+            self.restarts.pop(serial, None)
         process = self.processes.get(serial)
-        if process is None or serial in self.stopping:
+        if process is None or serial in self.terminating:
             return
         self.stopping.add(serial)
+        self.terminating.add(serial)
         process.terminate()
         # A context-bound timer cannot fire after this process has been deleted.
         timer = QTimer(process)
@@ -100,12 +112,99 @@ class MirroringManager(QObject):
         timer.start(2000)
         self.changed.emit()
 
+    def restart(self, device: Device):
+        if device.serial not in self.processes or device.serial in self.stopping:
+            return
+        self.restarts[device.serial] = device
+        # Quality changes must never go through request_stop / disable USB debugging.
+        self.stop(device.serial, restarting=True)
+
+    def request_stop(self, serial: str):
+        """Manual stop only. Disconnect and shutdown use stop() directly."""
+        mirror = self.processes.get(serial)
+        if mirror is None or serial in self.stopping:
+            return
+        if not self.settings.disable_debug_on_stop:
+            self.stop(serial)
+            return
+        adb = resolve_executable("adb", self.settings.adb_path)
+        if not adb:
+            self.stop(serial)
+            self.error.emit(tr("无法关闭 USB 调试 ({serial})：找不到 ADB；仍会停止投屏。", serial=serial))
+            return
+        self.stopping.add(serial)
+        command = QProcess(self)
+        command.setProgram(adb)
+        command.setArguments(["-s", serial, "shell", "settings", "put", "global", "adb_enabled", "0"])
+        command.setProcessEnvironment(tool_environment())
+        command.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        self.debug_commands[serial] = command
+        timer = QTimer(command)
+        timer.setSingleShot(True)
+        timed_out = False
+
+        def complete(code, status):
+            if self.debug_commands.get(serial) is not command:
+                return
+            timer.stop()
+            output = bytes(command.readAllStandardOutput()).decode("utf-8", "replace").strip()[-2000:]
+            self.debug_commands.pop(serial)
+            command.finished.disconnect()
+            command.errorOccurred.disconnect()
+            timer.timeout.disconnect()
+            command.deleteLater()
+            failed = timed_out or code != 0 or status != QProcess.ExitStatus.NormalExit or bool(output)
+            if self.processes.get(serial) is mirror:
+                self.stop(serial)
+            elif serial not in self.processes:
+                self.stopping.discard(serial)
+            self.changed.emit()
+            if failed:
+                self.error.emit(tr("无法确认 USB 调试已关闭 ({serial})：{error}；仍会停止投屏。请在手机上检查。",
+                                   serial=serial, error=tr("请求超时") if timed_out else output or command.errorString()))
+            else:
+                self.log.emit(tr("已发送关闭 USB 调试请求 ({serial})；请在手机上确认，下次投屏需手动开启。", serial=serial))
+
+        def timeout():
+            nonlocal timed_out
+            timed_out = True
+            command.kill()
+
+        def error(reason):
+            if reason == QProcess.ProcessError.FailedToStart:
+                complete(-1, QProcess.ExitStatus.CrashExit)
+
+        command.finished.connect(complete)
+        command.errorOccurred.connect(error)
+        timer.timeout.connect(timeout)
+        timer.start(3000)
+        self.log.emit(tr("正在尝试关闭 USB 调试 ({serial})…", serial=serial))
+        command.start()
+        self.changed.emit()
+
+    def request_stop_all(self):
+        for serial in list(self.processes):
+            self.request_stop(serial)
+
     def stop_all(self):
         for serial in list(self.processes):
             self.stop(serial)
 
     def shutdown(self):
         self.shutting_down = True
+        self.restarts.clear()
+        for serial, command in list(self.debug_commands.items()):
+            self.debug_commands.pop(serial)
+            command.finished.disconnect()
+            command.errorOccurred.disconnect()
+            for timer in command.findChildren(QTimer):
+                timer.stop()
+                timer.timeout.disconnect()
+            command.kill()
+            command.waitForFinished(1000)
+            command.deleteLater()
+            if serial not in self.processes:
+                self.stopping.discard(serial)
         processes = list(self.processes.values())
         self.stop_all()
         for process in processes:
