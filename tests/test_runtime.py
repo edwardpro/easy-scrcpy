@@ -18,6 +18,15 @@ spec.loader.exec_module(prepare)
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_windows_cp1252_console_handles_unicode(self):
+        output = io.BytesIO()
+        stream = io.TextIOWrapper(output, encoding="cp1252")
+        with patch.object(prepare.sys, "stdout", stream), patch.object(prepare.sys, "stderr", None):
+            prepare.configure_console()
+            print("下载 → 内置依赖", flush=True)
+        self.assertEqual(output.getvalue().decode("utf-8").strip(), "下载 → 内置依赖")
+        stream.close()
+
     def test_frozen_bundle_resolution_precedes_path(self):
         with tempfile.TemporaryDirectory() as temp:
             runtime = Path(temp) / "runtime"

@@ -17,6 +17,13 @@ sys.path.insert(0, str(ROOT / "src"))
 from easy_scrcpy.runtime import host_target
 
 
+def configure_console():
+    """Windows redirected stdout can default to CP1252 even in CI."""
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+
+
 def sha256(path: Path) -> str:
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest() if hasattr(hashlib, "file_digest") else _digest(stream)
@@ -34,6 +41,7 @@ def download(url: str, destination: Path, expected: str):
         return
     destination.parent.mkdir(parents=True, exist_ok=True)
     partial = destination.with_suffix(destination.suffix + ".part")
+    configure_console()
     print(f"下载 {url}", flush=True)
     request = urllib.request.Request(url, headers={"User-Agent": "EasyScrcpy-build/0.1"})
     try:
@@ -97,7 +105,8 @@ def validate(root: Path, target: str):
 
 
 def prepare(target: str, cache: Path | None = None) -> Path:
-    lock = json.loads((ROOT / "packaging/dependencies.json").read_text())
+    configure_console()
+    lock = json.loads((ROOT / "packaging/dependencies.json").read_text(encoding="utf-8"))
     asset = lock["targets"][target]
     destination = ROOT / "vendor" / target
     manifest = {"target": target, "scrcpy_version": lock["version"],
@@ -105,7 +114,7 @@ def prepare(target: str, cache: Path | None = None) -> Path:
                 "platform_tools_sha256": lock["platform_tools_sha256"][asset["adb_os"]]}
     if destination.exists():
         validate(destination, target)
-        existing = json.loads((destination / "manifest.json").read_text())
+        existing = json.loads((destination / "manifest.json").read_text(encoding="utf-8"))
         if any(existing.get(k) != v for k, v in manifest.items()):
             raise ValueError(f"已有不同版本的依赖，请先移动 {destination} 再重新构建")
         for name, digest in existing["files"].items():
@@ -147,8 +156,9 @@ def prepare(target: str, cache: Path | None = None) -> Path:
 
 
 def main():
+    configure_console()
     parser = argparse.ArgumentParser(description="准备内置 scrcpy / ADB，仅构建时联网")
-    parser.add_argument("--target", choices=json.loads((ROOT / "packaging/dependencies.json").read_text())["targets"])
+    parser.add_argument("--target", choices=json.loads((ROOT / "packaging/dependencies.json").read_text(encoding="utf-8"))["targets"])
     parser.add_argument("--cache", type=Path)
     args = parser.parse_args()
     prepare(args.target or host_target(), args.cache)

@@ -107,8 +107,8 @@ def updated_notices(text, old, new):
 
 def apply_update(root, lock, targets, cache=None):
     """Prepare everything before changing live files; preserve originals and rollback."""
-    old = json.loads((root / "packaging/dependencies.json").read_text())
-    notices = updated_notices((root / "packaging/THIRD_PARTY_NOTICES.md").read_text(), old, lock)
+    old = json.loads((root / "packaging/dependencies.json").read_text(encoding="utf-8"))
+    notices = updated_notices((root / "packaging/THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8"), old, lock)
     cache = cache or root / ".cache/downloads"
     staging_parent = root / ".cache"
     staging_parent.mkdir(parents=True, exist_ok=True)
@@ -151,6 +151,7 @@ def apply_update(root, lock, targets, cache=None):
 
 
 def main():
+    prepare_runtime.configure_console()
     parser = argparse.ArgumentParser(description="预览或更新官方内置 scrcpy / ADB")
     parser.add_argument("--version", help="指定稳定版，例如 5.0；默认官方最新稳定版")
     parser.add_argument("--apply", action="store_true", help="确认应用更新；不指定时只预览")
@@ -159,7 +160,7 @@ def main():
     parser.add_argument("--cache", type=Path, help="下载缓存路径")
     args = parser.parse_args()
     try:
-        old = json.loads((ROOT / "packaging/dependencies.json").read_text())
+        old = json.loads((ROOT / "packaging/dependencies.json").read_text(encoding="utf-8"))
         lock = release_lock(args.version)
         # Refresh every existing managed platform to avoid leaving stale bundles.
         existing = [target for target in ASSETS if (ROOT / "vendor" / target).exists()]
