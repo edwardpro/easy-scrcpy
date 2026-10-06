@@ -23,6 +23,7 @@ class MirroringManager(QObject):
         self.terminating: set[str] = set()
         self.debug_commands: dict[str, QProcess] = {}
         self.restarts: dict[str, Device] = {}
+        self.usb_devices: set[str] = set()
         self.output: dict[str, deque[str]] = {}
         self.shutting_down = False
 
@@ -53,6 +54,10 @@ class MirroringManager(QObject):
         process.setWorkingDirectory(str(Path(executable).parent))
         process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
         serial = device.serial
+        if device.usb:
+            self.usb_devices.add(serial)
+        else:
+            self.usb_devices.discard(serial)
         self.processes[serial] = process
         self.output[serial] = deque(maxlen=40)
         process.readyReadStandardOutput.connect(lambda: self._read(serial, process))
@@ -124,7 +129,7 @@ class MirroringManager(QObject):
         mirror = self.processes.get(serial)
         if mirror is None or serial in self.stopping:
             return
-        if not self.settings.disable_debug_on_stop:
+        if not self.settings.disable_debug_on_stop or serial not in self.usb_devices:
             self.stop(serial)
             return
         adb = resolve_executable("adb", self.settings.adb_path)

@@ -39,6 +39,7 @@ class ControlWindow(QWidget):
     quit_requested = Signal()
     quality_requested = Signal(str, str)
     custom_quality_requested = Signal(str)
+    wireless_requested = Signal()
 
     def __init__(self, icon: QIcon):
         super().__init__()
@@ -49,7 +50,7 @@ class ControlWindow(QWidget):
         self.device_view_key = None
         self.tray_available = True
         layout = QVBoxLayout(self)
-        title = QLabel("Easy Scrcpy · USB 设备投屏")
+        title = QLabel("Easy Scrcpy · Android 设备投屏")
         title.setStyleSheet("font-size: 22px; font-weight: 600; padding: 8px 0;")
         layout.addWidget(title)
         self.health = QLabel("正在检查运行环境…")
@@ -82,13 +83,13 @@ class ControlWindow(QWidget):
         quality_hint = QLabel("修改画质会重启该设备投屏，不会关闭 USB 调试；只影响投屏画面，不修改手机屏幕分辨率。")
         quality_hint.setWordWrap(True)
         devices_layout.addWidget(quality_hint)
-        tabs.addTab(devices_tab, "USB 设备")
+        tabs.addTab(devices_tab, "设备")
         self.logs = QPlainTextEdit()
         self.logs.setReadOnly(True)
         self.logs.document().setMaximumBlockCount(1000)
         tabs.addTab(self.logs, "运行日志")
         buttons = QHBoxLayout()
-        for label, signal in (("设置", self.settings_requested), ("停止全部投屏", self.stop_all_requested)):
+        for label, signal in (("无线连接", self.wireless_requested), ("设置", self.settings_requested), ("停止全部投屏", self.stop_all_requested)):
             button = QPushButton(label)
             button.clicked.connect(signal.emit)
             buttons.addWidget(button)
@@ -109,7 +110,8 @@ class ControlWindow(QWidget):
         for row, device in enumerate(devices):
             running = device.serial in manager.processes
             state = tr("正在停止…" if device.serial in manager.stopping else "投屏中" if running else STATE_LABELS.get(device.state, device.state))
-            for column, text in enumerate((device.model.replace("_", " "), device.serial, state)):
+            connection = "USB" if device.usb else "Wi-Fi"
+            for column, text in enumerate((f"{device.model.replace('_', ' ')} · {connection}", device.serial, state)):
                 self.table.setItem(row, column, QTableWidgetItem(text))
             label = tr("停止投屏" if running else "开始投屏")
             button = QToolButton()

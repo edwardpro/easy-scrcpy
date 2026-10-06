@@ -18,6 +18,8 @@ from .ui import ControlWindow, SettingsDialog, QualityDialog, STATE_LABELS
 from .i18n import tr, set_language, translate_widget, translate_message_buttons
 from .runtime import icon_path
 from .notifications import DeviceNotifications
+from .wireless_ui import WirelessDialog
+from .wireless import WirelessConnection
 
 
 def app_icon() -> QIcon:
@@ -82,6 +84,8 @@ class Controller(QObject):
         self.prompts = {}
         self.settings_dialog = None
         self.quality_dialogs = {}
+        self.wireless_dialog = None
+        self.disconnect_jobs = {}
         icon = app_icon()
         app.setWindowIcon(icon)
         self.window = ControlWindow(icon)
@@ -102,6 +106,7 @@ class Controller(QObject):
         self.window.quit_requested.connect(self.quit)
         self.window.quality_requested.connect(self.select_quality)
         self.window.custom_quality_requested.connect(self.open_quality)
+        self.window.wireless_requested.connect(self.open_wireless)
         self.manager.restart_ready.connect(self.restart_device)
         self.manager.changed.connect(self.refresh)
         self.manager.error.connect(self.show_error)
@@ -151,9 +156,10 @@ class Controller(QObject):
         self.tray.setToolTip(tr("Easy Scrcpy · {devices} 台设备 · {mirrors} 路投屏", devices=len(devices), mirrors=len(self.manager.processes)))
         self.menu.clear()
         self.menu.addAction(tr("打开设备面板"), self.show_window)
+        self.menu.addAction(tr("无线连接"), self.open_wireless)
         self.menu.addSeparator()
         if not devices:
-            self.menu.addAction(tr("未发现 USB Android 设备")).setEnabled(False)
+            self.menu.addAction(tr("未发现 Android 设备")).setEnabled(False)
         for device in devices:
             running = device.serial in self.manager.processes
             state = tr("正在停止" if device.serial in self.manager.stopping else "投屏中" if running else STATE_LABELS.get(device.state, device.state))
@@ -164,6 +170,8 @@ class Controller(QObject):
             else:
                 action = submenu.addAction(tr("开始投屏"), lambda s=device.serial: self.start_device(s))
                 action.setEnabled(device.state == "device" and device.serial not in self.manager.stopping)
+            if not device.usb:
+                submenu.addAction(tr("断开无线连接"), lambda s=device.serial: self.disconnect_wireless(s))
         self.menu.addSeparator()
         self.menu.addAction(tr("停止全部投屏"), self.manager.request_stop_all).setEnabled(bool(self.manager.processes))
         self.menu.addAction(tr("设置…"), self.open_settings)
@@ -223,6 +231,20 @@ class Controller(QObject):
         if device is not None:
             self.manager.start(device)
 
+    def open_wireless(self):
+        if self.wireless_dialog:
+            self.wireless_dialog.raise_()
+            self.wireless_dialog.activateWindow()
+            return
+        dialog = WirelessDialog(self)
+        self.wireless_dialog = dialog
+        def finished(result):
+            self.wireless_dialog = None
+            dialog.finished.disconnect()
+            dialog.deleteLater()
+        dialog.finished.connect(finished)
+        dialog.show()
+
     def notification_action(self, serial, action):
         if self.quitting:
             return
@@ -238,6 +260,68 @@ class Controller(QObject):
             self.manager.request_stop(serial)
         elif action == "settings":
             self.open_quality(serial)
+
+    def remember_paired(self, guid, name, address):
+        from datetime import datetime
+        records = [r for r in self.settings.paired_devices if r.get("guid") != guid]
+        records.insert(0, {"guid": guid, "name": name, "address": address,
+                           "paired_at": datetime.now().isoformat(timespec="seconds")})
+        self._save_paired(records)
+
+    def forget_paired(self, guid):
+        # Only forgets the local record; the phone keeps its authorization until revoked there.
+        self._save_paired([r for r in self.settings.paired_devices if r.get("guid") != guid])
+
+    def _save_paired(self, records):
+        settings = replace(self.settings, paired_devices=records)
+        try:
+            settings.save(self.config_path)
+        except (OSError, ValueError) as error:
+            self.show_error(tr("无法保存设置") + "\n" + str(error))
+            return
+        self.settings = settings
+        self.monitor.settings = settings
+        self.manager.settings = settings
+
+    def disconnect_wireless(self, serial):
+        device = self.presence.devices.get(serial)
+        if device is None or device.usb or serial in self.disconnect_jobs:
+            return
+        dialog = QMessageBox(QMessageBox.Icon.Warning, tr("断开无线连接"),
+            tr("断开会影响其他工具对该设备的 ADB 连接，但不会关闭手机无线调试。是否继续？"),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, self.window)
+        dialog.setDefaultButton(QMessageBox.StandardButton.No)
+        translate_message_buttons(dialog)
+        self.disconnect_jobs[serial] = dialog
+        def confirmed(result):
+            self.disconnect_jobs.pop(serial, None)
+            dialog.finished.disconnect()
+            dialog.deleteLater()
+            current = self.presence.devices.get(serial)
+            if result != QMessageBox.StandardButton.Yes or self.quitting or current is None or current.usb:
+                return
+            job = WirelessConnection(self.settings, self)
+            self.disconnect_jobs[serial] = job
+            def status_changed(status):
+                if status not in {"failed", "disconnected", "timeout", "cancelled"}:
+                    return
+                self.disconnect_jobs.pop(serial, None)
+                job.status.disconnect()
+                if status == "disconnected":
+                    self.manager.stop(serial)
+                    self.monitor.scan()
+                elif not self.quitting:
+                    self.show_error(tr("连接失败，请检查地址、端口、授权及防火墙。"))
+                # Give a killed process time to finish before deleting its owner.
+                job.shutdown()
+                job.deleteLater()
+            job.status.connect(status_changed)
+            try:
+                job.disconnect_device(serial)
+            except (ValueError, OSError):
+                status_changed("failed")
+        dialog.finished.connect(confirmed)
+        dialog.show()
 
     def restart_device(self, device):
         current = self.presence.devices.get(device.serial)
@@ -365,6 +449,15 @@ class Controller(QObject):
         if self.quitting:
             return
         self.quitting = True
+        for job in list(self.disconnect_jobs.values()):
+            if isinstance(job, WirelessConnection):
+                job.status.disconnect()
+                job.shutdown()
+            else:
+                job.reject()
+        self.disconnect_jobs.clear()
+        if self.wireless_dialog:
+            self.wireless_dialog.cleanup(0)
         self.notifications.shutdown()
         self.monitor.stop()
         self.manager.shutdown()

@@ -42,6 +42,19 @@ Bundled tools do not replace device drivers: some Windows phones still need OEM 
 
 ## Development
 
+### Wireless connection (feature branch)
+
+Choose **Wireless connection** in the panel or tray. Two methods are available:
+
+- **Pairing code (first time)**: on the phone open Developer options → Wireless debugging → *Pair device with pairing code*. Enter the phone IP, the **connection port** from the main Wireless debugging page (“IP address & Port”), and the separate **pairing port** and six-digit code from the pairing dialog.
+- **IP connection (paired)**: for a phone already paired with this computer, enter the IP and connection port. The connection port changes whenever wireless debugging is turned off and on again.
+
+Optionally generate a web QR code and scan it on the phone to fill in the phone IP automatically. A web page cannot read debugging ports, so the page shows step-by-step instructions for finding them. Scanning does not authorize ADB.
+
+The app verifies the transport with `adb devices -l` before reporting success, and shows the raw ADB response plus a hint for failures (unreachable network, refused port, wrong / expired code, not paired). On macOS, allow EasyScrcpy under System Settings → Privacy & Security → Local Network. If the computer can reach the phone but ADB reports “No route to host”, the running ADB server was probably started by a terminal or another tool without that permission; the dialog then offers **Restart ADB server**, which requires confirmation because it briefly disconnects every ADB device and tool.
+
+Connected phones appear in the main list as **Wi-Fi**. The tray submenu offers **Disconnect wireless** (with confirmation); it does not turn off wireless debugging. The optional USB-debugging shutdown setting does not apply to wireless Stop. The pairing code is passed to the short-lived `adb pair` process as an argument, never saved or logged. The temporary web server uses a random URL and closes after five minutes, on cancel or on success.
+
 Run from the project directory:
 
 ```bash
@@ -162,6 +175,19 @@ Windows 和已打包的 macOS 应用支持每个已授权 USB 设备一条原生
 内置依赖不等于内置驱动：Windows 个别手机仍需 OEM USB 驱动；Ubuntu 仍需 USB 访问权限 / udev 规则。桌面图形库和 GPU 驱动属于操作系统依赖。
 
 ## 开发运行
+
+### 无线连接（功能分支）
+
+在面板或托盘点击“无线连接”，提供两种方式：
+
+- **配对码连接（首次）**：手机打开“开发者选项 → 无线调试 → 使用配对码配对设备”。填写手机 IP、无线调试主页面“IP 地址和端口”中的**连接端口**，以及配对弹窗中的**配对端口**和六位配对码。
+- **IP 连接（已配对）**：已与本电脑配对的手机，填写 IP 和连接端口即可。关闭再开启无线调试后连接端口会变化。
+
+可生成网页二维码，手机扫码后自动填写手机 IP。网页无法读取调试端口，页面会给出查找端口的分步说明；扫码本身不会完成 ADB 授权。
+
+应用用 `adb devices -l` 验证连接后才提示成功；失败时显示 ADB 原始返回及原因提示（网络不可达、端口被拒绝、配对码错误或过期、未配对）。macOS 需在“系统设置 → 隐私与安全性 → 本地网络”允许 EasyScrcpy。若电脑能访问手机但 ADB 返回 “No route to host”，通常是当前 ADB 服务由终端或其他工具启动、缺少该权限；此时窗口提供“重启 ADB 服务”，需确认，因为会短暂断开所有 ADB 设备和工具。
+
+连接成功的手机在主界面标记为 Wi-Fi。托盘子菜单提供“断开无线连接”（需确认），不会关闭手机无线调试。“停止时关闭 USB 调试”不作用于无线 Stop。配对码仅作为参数传给短时运行的 `adb pair` 进程，不保存、不写日志。临时网页服务使用随机 URL，五分钟、取消或连接成功后关闭。
 
 在项目目录运行：
 

@@ -41,14 +41,14 @@ def is_network_or_emulator(serial: str) -> bool:
 
 
 class Presence:
-    """One prompt per ready connection; failed scans must not be applied."""
+    """USB/Wi-Fi transport presence; failed scans must not be applied."""
 
     def __init__(self):
         self.devices: dict[str, Device] = {}
         self.prompted: set[str] = set()
 
     def update(self, devices: list[Device]) -> tuple[list[Device], set[str]]:
-        current = {d.serial: d for d in devices if d.usb}
+        current = {d.serial: d for d in devices if not d.serial.startswith("emulator-")}
         lost = {s for s, d in self.devices.items()
                 if d.state == "device" and (s not in current or current[s].state != "device")}
         self.prompted.intersection_update(current)
@@ -71,6 +71,7 @@ class Settings:
     video_bit_rate: int = 8
     audio_bit_rate: int = 128
     device_quality: dict = field(default_factory=dict)
+    paired_devices: list = field(default_factory=list)
 
     @classmethod
     def load(cls, path: Path) -> "Settings":
@@ -98,6 +99,10 @@ class Settings:
             if not isinstance(serial, str):
                 raise ValueError(tr("画质参数超出范围"))
             validate_quality(quality)
+        for record in result.paired_devices:
+            if (not isinstance(record, dict) or not isinstance(record.get("guid"), str) or not record["guid"]
+                    or any(not isinstance(record.get(k, ""), str) for k in ("name", "address", "paired_at"))):
+                raise ValueError(tr("设置类型错误：{key}", key="paired_devices"))
         return result
 
     def save(self, path: Path):

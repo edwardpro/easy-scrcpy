@@ -153,8 +153,8 @@ else:
             with patch("easy_scrcpy.monitor.resolve_executable", return_value=sys.executable):
                 monitor.scan()
                 wait_until(lambda: len(snapshots) == 1)
-                self.assertEqual([d.serial for d in snapshots[0]], ["a", "b", "c"])
-                self.assertTrue(all(d.usb for d in snapshots[0]))
+                self.assertEqual([d.serial for d in snapshots[0]], ["a", "b", "c", "192.168.1.2:5555"])
+                self.assertTrue(all(d.usb for d in snapshots[0][:3]))
                 script.with_suffix(".fail").touch()
                 monitor.scan()
                 wait_until(lambda: not monitor.active)
