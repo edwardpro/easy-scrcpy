@@ -77,9 +77,30 @@ class KeyboardTests(unittest.TestCase):
         dialog = InputDialog(Device('example', 'device'), Settings(), None)
         try:
             with patch('easy_scrcpy.ui.resolve_executable', return_value='/nonexistent/adb'):
+                # FailedToStart may be delivered before start() returns on Windows.
+                # Inspect arguments before starting, then exercise immediate cleanup.
+                with patch.object(QProcess, 'start') as start, patch.object(
+                        QProcess, 'readAllStandardOutput', return_value=b''):
+                    dialog.open_physical_settings()
+                    command = dialog.command
+                    self.assertEqual(command.arguments(), ['-s', 'example', 'shell', 'am', 'start', '-a', 'android.settings.HARD_KEYBOARD_SETTINGS'])
+                    start.assert_called_once_with()
+                    command.errorOccurred.emit(QProcess.ProcessError.FailedToStart)
+                self.assertIsNone(dialog.command)
+                self.assertFalse(dialog.timer.isActive())
+                self.assertTrue(dialog.physical.isEnabled())
+                # Reproduce Windows: emit the failure inside start(), before it returns.
+                def fail_immediately():
+                    dialog.command.errorOccurred.emit(QProcess.ProcessError.FailedToStart)
+
+                with patch.object(QProcess, 'start', side_effect=fail_immediately), patch.object(
+                        QProcess, 'readAllStandardOutput', return_value=b''):
+                    dialog.open_physical_settings()
+                self.assertIsNone(dialog.command)
+                self.assertFalse(dialog.timer.isActive())
+                self.assertTrue(dialog.physical.isEnabled())
+                # Do not access the process after starting: it may already be deleted.
                 dialog.open_physical_settings()
-                command = dialog.command
-                self.assertEqual(command.arguments(), ['-s', 'example', 'shell', 'am', 'start', '-a', 'android.settings.HARD_KEYBOARD_SETTINGS'])
                 wait_until(lambda: dialog.command is None)
                 self.assertIsNone(dialog.command)
                 self.assertEqual(dialog.status.text(), tr('无法打开物理键盘设置'))
