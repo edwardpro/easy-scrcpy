@@ -25,7 +25,7 @@ native_imports = []
 if sys.platform == "win32":
     native_imports = collect_submodules("windows_toasts") + collect_submodules("winrt")
 elif sys.platform == "darwin":
-    native_imports = ["UserNotifications", "Foundation", "objc"]
+    native_imports = ["UserNotifications", "Foundation", "objc", "AppKit"]
 a = Analysis([str(root / "packaging/launcher.py")], pathex=[str(root / "src")],
              binaries=[], datas=data, hiddenimports=native_imports, hookspath=[], hooksconfig={},
              runtime_hooks=[], excludes=[], noarchive=False)

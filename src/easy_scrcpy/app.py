@@ -69,6 +69,25 @@ def tray_icon() -> QIcon:
     return app_icon()
 
 
+def set_macos_foreground(active: bool):
+    """LSUIElement bundles need a Regular policy for the Dock icon and menu bar."""
+    if sys.platform != "darwin" or os.environ.get("QT_QPA_PLATFORM") == "offscreen":
+        return
+    try:
+        from AppKit import (NSApplication, NSApplicationActivationPolicyAccessory,
+                            NSApplicationActivationPolicyRegular)
+    except ImportError:
+        return
+    application = NSApplication.sharedApplication()
+    application.setActivationPolicy_(
+        NSApplicationActivationPolicyRegular if active else NSApplicationActivationPolicyAccessory)
+    if active:
+        if hasattr(application, "activate"):
+            application.activate()
+        else:
+            application.activateIgnoringOtherApps_(True)
+
+
 class Controller(QObject):
     def __init__(self, app, config_path, settings, background=False, startup_error=""):
         super().__init__(app)
@@ -108,6 +127,7 @@ class Controller(QObject):
         self.window.custom_quality_requested.connect(self.open_quality)
         self.window.wireless_requested.connect(self.open_wireless)
         self.window.orientation_requested.connect(self.select_orientation)
+        self.window.hidden_to_tray.connect(lambda: set_macos_foreground(False))
         self.manager.restart_ready.connect(self.restart_device)
         self.manager.changed.connect(self.refresh)
         self.manager.error.connect(self.show_error)
@@ -134,6 +154,7 @@ class Controller(QObject):
             self.show_window()
 
     def show_window(self):
+        set_macos_foreground(True)
         self.window.showNormal()
         self.window.raise_()
         self.window.activateWindow()

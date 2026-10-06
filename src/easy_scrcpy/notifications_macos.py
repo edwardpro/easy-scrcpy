@@ -60,6 +60,10 @@ class MacNotifications:
                 content.setTitle_(name)
                 content.setBody_("Easy Scrcpy")
                 content.setCategoryIdentifier_(category_id)
+                # One thread per connection keeps devices from collapsing into
+                # a single notification group.
+                content.setThreadIdentifier_(token)
+                content.setSound_(UN.UNNotificationSound.defaultSound())
                 request = UN.UNNotificationRequest.requestWithIdentifier_content_trigger_(token, content, None)
                 self.center.addNotificationRequest_withCompletionHandler_(
                     request, lambda error: self.failure(f"macOS notification failed: {error}") if error else None)
@@ -84,7 +88,7 @@ class MacNotifications:
                         if not self.closed:
                             self.show(token, name, actions)
         self.center.requestAuthorizationWithOptions_completionHandler_(
-            UN.UNAuthorizationOptionAlert, completed)
+            UN.UNAuthorizationOptionAlert | UN.UNAuthorizationOptionSound, completed)
 
     def close(self):
         with self.lock:
