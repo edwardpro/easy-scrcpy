@@ -1,6 +1,6 @@
 from dataclasses import replace
 
-from PySide6.QtCore import Signal, Qt, QSize
+from PySide6.QtCore import Signal, Qt, QSize, QProcess, QTimer
 from PySide6.QtGui import QCloseEvent, QIcon
 from PySide6.QtWidgets import (
     QCheckBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout,
@@ -10,9 +10,9 @@ from PySide6.QtWidgets import (
 )
 
 from .core import (Settings, resolve_executable, QUALITY_LABELS, device_quality, ORIENTATION_OPTIONS,
-                   RESOLUTION_OPTIONS, FPS_OPTIONS, VIDEO_BIT_RATE_OPTIONS, AUDIO_BIT_RATE_OPTIONS)
+                   RESOLUTION_OPTIONS, FPS_OPTIONS, VIDEO_BIT_RATE_OPTIONS, AUDIO_BIT_RATE_OPTIONS, device_input)
 from .i18n import LANGUAGES, tr, translate_widget
-from .runtime import icon_path
+from .runtime import icon_path, tool_environment
 
 STATE_LABELS = {"device": "已就绪", "unauthorized": "请在手机上授权", "offline": "离线",
                  "no permissions": "缺少 USB 权限（检查 udev 规则）"}
@@ -53,6 +53,7 @@ class ControlWindow(QWidget):
     custom_quality_requested = Signal(str)
     wireless_requested = Signal()
     orientation_requested = Signal(str, int)
+    input_requested = Signal(str)
     hidden_to_tray = Signal()
 
     def __init__(self, icon: QIcon):
@@ -82,8 +83,7 @@ class ControlWindow(QWidget):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.Stretch)
         for column in (3, 4):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(5, 80)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
         self.table.verticalHeader().setDefaultSectionSize(56)
         self.table.verticalHeader().setMinimumSectionSize(56)
@@ -180,6 +180,11 @@ class ControlWindow(QWidget):
             action_layout = QHBoxLayout(action_cell)
             action_layout.setContentsMargins(6, 6, 6, 6)
             action_layout.addWidget(button, alignment=Qt.AlignmentFlag.AlignCenter)
+            input_button = QPushButton("键盘输入…")
+            input_button.setText(tr("键盘输入…"))
+            input_button.setEnabled(device.state == "device" and device.serial not in manager.stopping)
+            input_button.clicked.connect(lambda checked=False, s=device.serial: self.input_requested.emit(s))
+            action_layout.addWidget(input_button)
             self.table.setCellWidget(row, 5, action_cell)
         self.table.resizeColumnToContents(3)
         self.table.resizeColumnToContents(4)
@@ -333,3 +338,114 @@ class QualityDialog(QDialog):
     def quality(self):
         return {"profile": "custom", "max_size": self.size.currentData(), "max_fps": self.fps.currentData(),
                 "video_bit_rate": self.bitrate.currentData(), "audio_bit_rate": self.audio_bitrate.currentData()}
+
+
+class InputDialog(QDialog):
+    def __init__(self, device, settings, parent):
+        super().__init__(parent)
+        self.device = device
+        self.settings = settings
+        self.command = None
+        self.setWindowTitle("键盘输入")
+        self.resize(600, 420)
+        layout = QVBoxLayout(self)
+        label = QLabel(device.label)
+        label.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(label)
+        form = QFormLayout()
+        layout.addLayout(form)
+        options = device_input(device.serial, settings)
+        self.keyboard = QComboBox()
+        self.keyboard.addItem("兼容键盘（SDK）", "sdk")
+        self.keyboard.addItem("物理键盘（UHID，推荐）", "uhid")
+        self.keyboard.setCurrentIndex(self.keyboard.findData(options["keyboard"]))
+        form.addRow("键盘模式", self.keyboard)
+        self.clipboard = QCheckBox("自动同步剪贴板")
+        self.clipboard.setChecked(options["clipboard_autosync"])
+        form.addRow(self.clipboard)
+        for text in INPUT_GUIDANCE:
+            note = QLabel(text)
+            note.setWordWrap(True)
+            layout.addWidget(note)
+        self.physical = QPushButton("打开手机物理键盘设置")
+        self.physical.clicked.connect(self.open_physical_settings)
+        layout.addWidget(self.physical)
+        self.status = QLabel()
+        self.status.setWordWrap(True)
+        self.status.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(self.status)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        buttons.button(QDialogButtonBox.StandardButton.Save).setText("保存")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self.timer = QTimer(self)
+        self.timer.setSingleShot(True)
+        self.timer.timeout.connect(self.timeout)
+        self.finished.connect(self.cleanup)
+        self.retranslate()
+
+    def retranslate(self):
+        translate_widget(self)
+        for index, source in enumerate(("兼容键盘（SDK）", "物理键盘（UHID，推荐）")):
+            self.keyboard.setItemText(index, tr(source))
+
+    def options(self):
+        return {"keyboard": self.keyboard.currentData(), "clipboard_autosync": self.clipboard.isChecked()}
+
+    def open_physical_settings(self):
+        if self.command is not None:
+            return
+        adb = resolve_executable("adb", self.settings.adb_path)
+        if not adb:
+            self.status.setText(tr("无法打开物理键盘设置"))
+            return
+        command = QProcess(self)
+        self.command = command
+        command.setProgram(adb)
+        command.setArguments(["-s", self.device.serial, "shell", "am", "start", "-a",
+                              "android.settings.HARD_KEYBOARD_SETTINGS"])
+        command.setProcessEnvironment(tool_environment())
+        command.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        command.finished.connect(self.command_finished)
+        command.errorOccurred.connect(lambda error: self.command_finished(-1, QProcess.ExitStatus.CrashExit)
+                                      if error == QProcess.ProcessError.FailedToStart else None)
+        self.physical.setEnabled(False)
+        self.status.clear()
+        self.timer.start(5000)
+        command.start()
+
+    def command_finished(self, code, status):
+        if self.command is None:
+            return
+        output = bytes(self.command.readAllStandardOutput()).decode("utf-8", errors="replace").strip()
+        failed = code != 0 or status != QProcess.ExitStatus.NormalExit or "error" in output.lower() or "exception" in output.lower()
+        self.status.setText(tr("无法打开物理键盘设置") if failed else tr("请在手机上选择物理键盘布局"))
+        if failed and output:
+            self.status.setText(self.status.text() + "\n" + output)
+        self.cleanup()
+        self.physical.setEnabled(True)
+
+    def timeout(self):
+        self.status.setText(tr("无法打开物理键盘设置"))
+        self.cleanup()
+        self.physical.setEnabled(True)
+
+    def cleanup(self, *_):
+        self.timer.stop()
+        if self.command is not None:
+            command, self.command = self.command, None
+            command.finished.disconnect()
+            command.errorOccurred.disconnect()
+            if command.state() != QProcess.ProcessState.NotRunning:
+                command.kill()
+            command.deleteLater()
+
+
+INPUT_GUIDANCE = (
+    "先点击投屏窗口中的手机输入框，保持投屏窗口焦点，再用电脑键盘输入。保存会重启该设备投屏。",
+    "UHID 使用手机输入法处理中文和日语；首次请配置手机物理键盘布局。若设备不支持 UHID，请切回 SDK（主要支持 ASCII）。",
+    "电脑输入法直接提交中文可能无法输入。请先复制文字，点击手机输入框，再在投屏窗口按 MOD+V 粘贴文本：macOS 为左 Command+V，Windows / Linux 为左 Alt+V 或左 Super+V。部分安全输入框禁止粘贴。",
+    "自动同步开启时也可用 Ctrl+V；关闭后请用 MOD+V 主动传输并粘贴电脑文本。仅支持文本，不支持图片或视频剪贴板；需 Android 7 或更高。注意敏感内容。",
+)

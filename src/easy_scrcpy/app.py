@@ -11,10 +11,10 @@ from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
 from .autostart import Autostart
-from .core import Presence, Settings, resolve_executable, validate_quality, ORIENTATION_OPTIONS
+from .core import Presence, Settings, resolve_executable, validate_quality, ORIENTATION_OPTIONS, validate_input, device_input
 from .mirroring import MirroringManager
 from .monitor import DeviceMonitor
-from .ui import ControlWindow, SettingsDialog, QualityDialog, STATE_LABELS
+from .ui import ControlWindow, SettingsDialog, QualityDialog, InputDialog, STATE_LABELS
 from .i18n import tr, set_language, translate_widget, translate_message_buttons
 from .runtime import icon_path
 from .notifications import DeviceNotifications
@@ -103,6 +103,7 @@ class Controller(QObject):
         self.prompts = {}
         self.settings_dialog = None
         self.quality_dialogs = {}
+        self.input_dialogs = {}
         self.wireless_dialog = None
         self.disconnect_jobs = {}
         icon = app_icon()
@@ -127,6 +128,7 @@ class Controller(QObject):
         self.window.custom_quality_requested.connect(self.open_quality)
         self.window.wireless_requested.connect(self.open_wireless)
         self.window.orientation_requested.connect(self.select_orientation)
+        self.window.input_requested.connect(self.open_input)
         self.window.hidden_to_tray.connect(lambda: set_macos_foreground(False))
         self.manager.restart_ready.connect(self.restart_device)
         self.manager.changed.connect(self.refresh)
@@ -205,6 +207,10 @@ class Controller(QObject):
         previous = self.presence.devices
         ready, lost = self.presence.update(devices)
         for serial, dialog in list(self.prompts.items()):
+            device = self.presence.devices.get(serial)
+            if device is None or device.state != "device":
+                dialog.reject()
+        for serial, dialog in list(self.input_dialogs.items()):
             device = self.presence.devices.get(serial)
             if device is None or device.state != "device":
                 dialog.reject()
@@ -423,6 +429,43 @@ class Controller(QObject):
             self.log(tr("正在重启设备投屏以应用方向：{serial}", serial=serial))
             self.manager.restart(device)
 
+    def open_input(self, serial):
+        device = self.presence.devices.get(serial)
+        if device is None or device.state != "device" or serial in self.manager.stopping:
+            return
+        if serial in self.input_dialogs:
+            self.input_dialogs[serial].raise_()
+            self.input_dialogs[serial].activateWindow()
+            return
+        dialog = InputDialog(device, self.settings, self.window)
+        self.input_dialogs[serial] = dialog
+
+        def finished(result):
+            self.input_dialogs.pop(serial, None)
+            if result == InputDialog.DialogCode.Accepted and not self.quitting:
+                self.save_input(serial, dialog.options())
+            dialog.deleteLater()
+
+        dialog.finished.connect(finished)
+        dialog.show()
+
+    def save_input(self, serial, options):
+        if serial in self.manager.stopping:
+            return
+        try:
+            validate_input(options)
+            if options == device_input(serial, self.settings):
+                return
+            settings = replace(self.settings, device_input={**self.settings.device_input, serial: dict(options)})
+            settings.save(self.config_path)
+        except (OSError, ValueError) as error:
+            self.show_error(tr("无法保存设置") + "\n" + str(error))
+            return
+        self.apply_settings(settings)
+        device = self.presence.devices.get(serial)
+        if device and device.state == "device" and serial in self.manager.processes:
+            self.manager.restart(device)
+
     def open_settings(self):
         if self.settings_dialog is not None:
             self.settings_dialog.raise_()
@@ -450,6 +493,8 @@ class Controller(QObject):
         self.window.retranslate()
         for dialog in self.quality_dialogs.values():
             translate_widget(dialog)
+        for dialog in self.input_dialogs.values():
+            dialog.retranslate()
         self.window.health.setText(tr(self.health_source))
         for serial, dialog in self.prompts.items():
             device = self.presence.devices.get(serial)
@@ -500,6 +545,8 @@ class Controller(QObject):
         self.disconnect_jobs.clear()
         if self.wireless_dialog:
             self.wireless_dialog.cleanup(0)
+        for dialog in list(self.input_dialogs.values()):
+            dialog.reject()
         self.notifications.shutdown()
         self.monitor.stop()
         self.manager.shutdown()
