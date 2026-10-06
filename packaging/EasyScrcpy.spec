@@ -6,6 +6,7 @@ from PyInstaller.utils.hooks import collect_submodules
 root = Path(SPECPATH).parent
 sys.path.insert(0, str(root / "src"))
 from easy_scrcpy.runtime import host_target
+from easy_scrcpy import __version__
 
 sys.path.insert(0, str(root / "packaging"))
 from prepare_runtime import prepare
@@ -36,8 +37,10 @@ exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="EasyScrcpy", debug=Fa
 collection = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="EasyScrcpy")
 if sys.platform == "darwin":
     app = BUNDLE(collection, name="EasyScrcpy.app", bundle_identifier="io.easy-scrcpy.app",
+                 version=__version__,
                  icon=str(icons / "icon.icns") if icons else None,
                  info_plist={
+                     "CFBundleVersion": __version__,
                      "LSUIElement": True, "NSHighResolutionCapable": True,
                      # macOS Local Network privacy: without these the bundled ADB
                      # server gets "No route to host" for wireless debugging.

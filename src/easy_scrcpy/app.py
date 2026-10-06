@@ -14,7 +14,7 @@ from .autostart import Autostart
 from .core import Presence, Settings, resolve_executable, validate_quality, ORIENTATION_OPTIONS, validate_input, device_input
 from .mirroring import MirroringManager
 from .monitor import DeviceMonitor
-from .ui import ControlWindow, SettingsDialog, QualityDialog, InputDialog, STATE_LABELS
+from .ui import ControlWindow, SettingsDialog, QualityDialog, InputDialog, AboutDialog, STATE_LABELS
 from .i18n import tr, set_language, translate_widget, translate_message_buttons
 from .runtime import icon_path
 from .notifications import DeviceNotifications
@@ -127,6 +127,7 @@ class Controller(QObject):
         self.window.quality_requested.connect(self.select_quality)
         self.window.custom_quality_requested.connect(self.open_quality)
         self.window.wireless_requested.connect(self.open_wireless)
+        self.window.disconnect_wireless_requested.connect(self.disconnect_wireless)
         self.window.orientation_requested.connect(self.select_orientation)
         self.window.input_requested.connect(self.open_input)
         self.window.hidden_to_tray.connect(lambda: set_macos_foreground(False))
@@ -201,7 +202,14 @@ class Controller(QObject):
         self.menu.addAction(tr("设置…"), self.open_settings)
         if sys.platform in {"darwin", "win32"}:
             self.menu.addAction(tr("通知权限…"), self.notifications.request_permission)
+        self.menu.addAction(tr("关于"), self.open_about)
         self.menu.addAction(tr("退出"), self.quit)
+
+    def open_about(self):
+        dialog = AboutDialog(self.window)
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
 
     def on_snapshot(self, devices):
         previous = self.presence.devices
