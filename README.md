@@ -262,3 +262,13 @@ python -m PyInstaller --noconfirm packaging/EasyScrcpy.spec
 设备断开响应通常在 2 秒左右，ADB 正常查询需少量额外时间；查询失败时保留之前状态，避免误杀仍在投屏的设备。设备数量较多时 USB 带宽和电脑编码 / 解码负载会影响性能。
 
 本项目是非官方 GUI，scrcpy 及相关组件版权和许可证属于各自作者。安装包的 `runtime/` 内保留原始 LICENSE、`licenses/platform-tools-NOTICE.txt`、第三方声明及依赖校验清单。
+
+### 键盘输入 / Keyboard input
+
+在设备行点击“键盘输入…”：兼容 SDK 为默认模式，物理键盘 UHID 推荐用于手机输入法处理中文和日语；USB 和 Wi-Fi 均可使用，设备不支持时可切回 SDK。保存修改只重启对应设备投屏。
+
+先在投屏窗口点击手机目标输入框，并保持窗口焦点，再使用电脑键盘。UHID 首次使用请点击“打开手机物理键盘设置”匹配布局；也可在投屏窗口按 MOD+K（MOD 为左 Alt 或左 Super，macOS 为 Command）。电脑输入法直接提交中文可能无法输入：请复制文字，点击手机输入框，在投屏窗口按 MOD+V 粘贴（macOS 左 Command+V，Windows / Linux 左 Alt+V 或左 Super+V）。自动同步开启时也可 Ctrl+V；关闭后使用 MOD+V 主动传输文本。需要 Android 7+，部分安全输入框禁止粘贴。仅支持文本剪贴板，不支持图片或视频；请注意敏感信息。
+
+Click **Keyboard input…** on a device row to select SDK (default) or UHID. UHID uses the phone’s input method for Chinese and Japanese, works over USB and Wi-Fi, and requires device support. Configure the phone’s physical keyboard layout with the settings shortcut or MOD+K. Changes restart only that device’s session.
+
+Click the target input field in the mirroring window and keep it focused before typing. Paste text composed on your computer with Ctrl+V / MOD+V (MOD is left Alt or left Super, Command on macOS). Secure fields may prohibit pasting. Clipboard autosync is enabled by default. When disabled, use MOD+V to explicitly transfer and paste computer text (left Command+V on macOS, left Alt+V or left Super+V on Windows / Linux). This requires Android 7+. Only text clipboard content is supported; images and videos are not. Be mindful of sensitive clipboard content.

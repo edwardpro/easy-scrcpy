@@ -73,6 +73,7 @@ class Settings:
     device_quality: dict = field(default_factory=dict)
     paired_devices: list = field(default_factory=list)
     device_orientation: dict = field(default_factory=dict)
+    device_input: dict = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path) -> "Settings":
@@ -107,6 +108,10 @@ class Settings:
         for serial, orientation in result.device_orientation.items():
             if not isinstance(serial, str) or orientation not in ORIENTATION_OPTIONS:
                 raise ValueError(tr("方向参数超出范围"))
+        for serial, options in result.device_input.items():
+            if not isinstance(serial, str):
+                raise ValueError(tr("设置类型错误：{key}", key="device_input"))
+            validate_input(options)
         return result
 
     def save(self, path: Path):
@@ -149,6 +154,10 @@ def scrcpy_arguments(device: Device, settings: Settings) -> list[str]:
         args.append("--no-audio")
     else:
         args.append(f"--audio-bit-rate={quality['audio_bit_rate']}K")
+    options = device_input(device.serial, settings)
+    args.append(f"--keyboard={options['keyboard']}")
+    if not options["clipboard_autosync"]:
+        args.append("--no-clipboard-autosync")
     return args
 
 
@@ -189,3 +198,18 @@ def device_quality(serial: str, settings: Settings) -> dict:
         return {"profile": profile, "audio_bit_rate": settings.audio_bit_rate, **QUALITY_PRESETS[profile]}
     return {"profile": "default", "max_size": settings.max_size, "max_fps": settings.max_fps,
             "video_bit_rate": settings.video_bit_rate, "audio_bit_rate": settings.audio_bit_rate}
+
+
+INPUT_DEFAULTS = {"keyboard": "sdk", "clipboard_autosync": True}
+
+
+def validate_input(options):
+    if (not isinstance(options, dict) or options.get("keyboard") not in ("sdk", "uhid")
+            or type(options.get("clipboard_autosync")) is not bool):
+        raise ValueError(tr("设置类型错误：{key}", key="device_input"))
+
+
+def device_input(serial, settings):
+    options = settings.device_input.get(serial, INPUT_DEFAULTS)
+    validate_input(options)
+    return dict(options)
