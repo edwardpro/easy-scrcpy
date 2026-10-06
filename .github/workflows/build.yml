@@ -17,6 +17,19 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - name: Resolve artifact name
+        id: names
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          platform=$(printf '%s' "${{ runner.os }}" | tr '[:upper:]' '[:lower:]')
+          arch=$(printf '%s' "${{ runner.arch }}" | tr '[:upper:]' '[:lower:]')
+          extension=zip
+          if [ "$platform" = linux ]; then extension=tar.gz; fi
+          artifact="easyScrcpy-${platform}-${arch}-${version}.${extension}"
+          echo "artifact=${artifact}" >> "$GITHUB_OUTPUT"
+          echo "archive=dist/${artifact}" >> "$GITHUB_OUTPUT"
       - name: Install Linux Qt runtime dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libegl1 libopengl0 libxkbcommon0
@@ -25,14 +38,20 @@ jobs:
       - run: python -m PyInstaller --noconfirm packaging/EasyScrcpy.spec
       - name: Archive macOS app preserving executable permissions
         if: runner.os == 'macOS'
-        run: ditto -c -k --sequesterRsrc --keepParent dist/EasyScrcpy.app dist/EasyScrcpy-macos.zip
+        run: ditto -c -k --sequesterRsrc --keepParent dist/EasyScrcpy.app "${{ steps.names.outputs.archive }}"
       - name: Archive Linux app preserving executable permissions
         if: runner.os == 'Linux'
-        run: tar -czf dist/EasyScrcpy-linux.tar.gz -C dist EasyScrcpy
+        run: tar -czf "${{ steps.names.outputs.archive }}" -C dist EasyScrcpy
+      - name: Archive Windows app
+        if: runner.os == 'Windows'
+        shell: bash
+        run: tar -a -cf "${{ steps.names.outputs.archive }}" -C dist EasyScrcpy
+      - name: List archives
+        shell: bash
+        run: ls -l dist
       - uses: actions/upload-artifact@v6
         with:
-          name: EasyScrcpy-${{ matrix.os }}
-          path: |
-            dist/*.zip
-            dist/*.tar.gz
-            dist/EasyScrcpy/**
+          name: ${{ steps.names.outputs.artifact }}
+          path: ${{ steps.names.outputs.archive }}
+          archive: false
+          if-no-files-found: error
