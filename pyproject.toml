@@ -10,7 +10,7 @@ requires-python = ">=3.10"
 dependencies = ["PySide6>=6.8,<7"]
 
 [project.optional-dependencies]
-build = ["pyinstaller>=6.11"]
+build = ["pyinstaller>=6.11", "Pillow>=11"]
 
 [project.gui-scripts]
 easy-scrcpy = "easy_scrcpy.app:main"

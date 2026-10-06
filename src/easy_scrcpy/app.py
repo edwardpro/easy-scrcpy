@@ -18,7 +18,20 @@ from .ui import ControlWindow, SettingsDialog, QualityDialog, STATE_LABELS
 from .i18n import tr, set_language, translate_widget, translate_message_buttons
 
 
+def icon_path(name: str) -> Path:
+    if getattr(sys, "frozen", False):
+        root = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+    else:
+        root = Path(__file__).resolve().parents[2]
+    return root / "assets" / name
+
+
 def app_icon() -> QIcon:
+    path = icon_path("icon.png")
+    if path.is_file():
+        icon = QIcon(str(path))
+        if not icon.isNull():
+            return icon
     pixmap = QPixmap(64, 64)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
@@ -32,6 +45,16 @@ def app_icon() -> QIcon:
     painter.drawLine(29, 47, 35, 47)
     painter.end()
     return QIcon(pixmap)
+
+
+def tray_icon() -> QIcon:
+    path = icon_path("tray-icon.png")
+    if path.is_file():
+        icon = QIcon(str(path))
+        if not icon.isNull():
+            # User-supplied colored artwork is not a macOS monochrome template.
+            return icon
+    return app_icon()
 
 
 class Controller(QObject):
@@ -54,7 +77,7 @@ class Controller(QObject):
         self.window = ControlWindow(icon)
         self.manager = MirroringManager(settings, self)
         self.monitor = DeviceMonitor(settings, self)
-        self.tray = QSystemTrayIcon(icon, self)
+        self.tray = QSystemTrayIcon(tray_icon(), self)
         self.menu = QMenu()
         self.tray.setContextMenu(self.menu)
         self.tray.setToolTip("Easy Scrcpy")
