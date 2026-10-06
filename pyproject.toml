@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "easy-scrcpy"
+version = "0.1.0"
+description = "Cross-platform tray companion for scrcpy"
+requires-python = ">=3.10"
+dependencies = ["PySide6>=6.8,<7"]
+
+[project.optional-dependencies]
+build = ["pyinstaller>=6.11"]
+
+[project.gui-scripts]
+easy-scrcpy = "easy_scrcpy.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

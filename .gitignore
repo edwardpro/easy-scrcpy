@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+*.spec
+!packaging/EasyScrcpy.spec
+vendor/
+.cache/
+.DS_Store

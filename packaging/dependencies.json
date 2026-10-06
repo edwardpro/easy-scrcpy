@@ -1,0 +1,16 @@
+{
+  "version": "5.0",
+  "platform_tools_version": "37.0.1",
+  "targets": {
+    "macos-aarch64": {"asset": "scrcpy-macos-aarch64-v5.0.tar.gz", "sha256": "7cb4e41c859b05b36e89dc9be6c353cc5980c00d7f7f6a763b5b355551b82e9c", "adb_os": "darwin"},
+    "macos-x86_64": {"asset": "scrcpy-macos-x86_64-v5.0.tar.gz", "sha256": "dacb995c8eb42528cb96b2da2a2e3110fe5c82281378e6044fc7cccf48a7c39a", "adb_os": "darwin"},
+    "windows-x86_64": {"asset": "scrcpy-win64-v5.0.zip", "sha256": "44c10d9e82f20ea67227d14d37bf9fbe3603117c5736df3f514544a02ba20a73", "adb_os": "win"},
+    "windows-aarch64": {"asset": "scrcpy-winarm64-v5.0.zip", "sha256": "afc1db17b216f91470d2c8f41ea786ae18ab1cb2bc2324bc05ec3d7685aa6054", "adb_os": "win"},
+    "linux-x86_64": {"asset": "scrcpy-linux-x86_64-v5.0.tar.gz", "sha256": "f052ad9eb981879e8c5f066c5ef122b39b6c9853b383d6497219030e6549baed", "adb_os": "linux"}
+  },
+  "platform_tools_sha256": {
+    "darwin": "ee39ad5967e95c2a07f04dbcbde96b1a0c916ba376096db5d2f498b7727a5d1d",
+    "linux": "d230f13842f60f782a8645f9c813f8f845bf36089ea7289f28c48f17979313f1",
+    "win": "45f4d63113e895ebde0c90f194099a4676b6ac653bd28d54314a9e022bbc1a99"
+  }
+}
