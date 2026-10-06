@@ -70,7 +70,7 @@ class TranslationTests(unittest.TestCase):
                     self.assertEqual(controller.window.health.text(), tr("正在监听 USB Android 设备"))
                     self.assertEqual(dialog.button(QMessageBox.StandardButton.Yes).text(), tr("是"))
                     self.assertEqual(dialog.text(), tr("{device}\n\n是否开始投屏？", device=device.label))
-                    self.assertTrue(any(label.text() == tr("Easy Scrcpy · USB 设备投屏")
+                    self.assertTrue(any(label.text() == tr("Easy Scrcpy · Android 设备投屏")
                                         for label in controller.window.findChildren(QLabel)))
                 self.assertIn("unchanged raw output {test}", controller.window.logs.toPlainText())
                 self.assertIs(controller.prompts["a"], dialog)

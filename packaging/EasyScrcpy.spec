@@ -37,4 +37,11 @@ collection = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="Eas
 if sys.platform == "darwin":
     app = BUNDLE(collection, name="EasyScrcpy.app", bundle_identifier="io.easy-scrcpy.app",
                  icon=str(icons / "icon.icns") if icons else None,
-                 info_plist={"LSUIElement": True, "NSHighResolutionCapable": True})
+                 info_plist={
+                     "LSUIElement": True, "NSHighResolutionCapable": True,
+                     # macOS Local Network privacy: without these the bundled ADB
+                     # server gets "No route to host" for wireless debugging.
+                     "NSLocalNetworkUsageDescription":
+                         "Easy Scrcpy connects to Android devices on your local network for wireless debugging and mirroring.",
+                     "NSBonjourServices": ["_adb._tcp", "_adb-tls-connect._tcp", "_adb-tls-pairing._tcp"],
+                 })

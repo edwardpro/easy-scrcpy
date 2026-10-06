@@ -90,6 +90,8 @@ class DeviceMonitor(QObject):
             device = self.pending.pop(0)
             if device.usb:
                 self.devices.append(device)
+            elif is_network_or_emulator(device.serial) and not device.serial.startswith("emulator-"):
+                self.devices.append(device)
             elif not is_network_or_emulator(device.serial):
                 # Some hosts omit usb: metadata in `devices -l`.
                 self.phase = "path"
@@ -97,7 +99,7 @@ class DeviceMonitor(QObject):
                 self._run(["-s", device.serial, "get-devpath"])
                 return
         self.active = False
-        self.health.emit("正在监听 USB Android 设备")
+        self.health.emit("正在监听 USB 和 Wi-Fi Android 设备")
         self.snapshot.emit(self.devices)
 
     def stop(self):

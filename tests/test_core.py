@@ -40,8 +40,8 @@ emulator-5554 device model:Emulator
         a = Device("a", "device", usb=True)
         b = Device("b", "device", usb=True)
         network = Device("host:5555", "device")
-        self.assertEqual(presence.update([a, b, network]), ([a, b], set()))
-        self.assertEqual(presence.update([b]), ([], {"a"}))
+        self.assertEqual(presence.update([a, b, network]), ([a, b, network], set()))
+        self.assertEqual(presence.update([b]), ([], {"a", "host:5555"}))
         self.assertEqual(presence.devices, {"b": b})
 
     def test_arguments_are_not_shell_commands(self):
