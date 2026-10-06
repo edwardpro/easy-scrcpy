@@ -11,6 +11,22 @@ from test_qt import APP
 
 
 class IconTests(unittest.TestCase):
+    def test_mac_template_uses_monochrome_artwork_and_alpha(self):
+        with tempfile.TemporaryDirectory() as temp:
+            assets = Path(temp) / "assets"
+            assets.mkdir()
+            image = QImage(64, 64, QImage.Format.Format_ARGB32)
+            image.fill(QColor("white"))
+            image.setPixelColor(32, 32, QColor("black"))
+            image.save(str(assets / "tray-icon-mac.png"))
+            with patch.object(sys, "platform", "darwin"), patch.object(sys, "frozen", True, create=True), patch.object(
+                    sys, "_MEIPASS", temp, create=True):
+                icon = tray_icon()
+                self.assertTrue(icon.isMask())
+                result = icon.pixmap(64, 64).toImage()
+                self.assertEqual(result.pixelColor(0, 0).alpha(), 0)
+                self.assertEqual(result.pixelColor(32, 32).alpha(), 255)
+
     def test_separate_app_and_tray_images_in_frozen_bundle(self):
         with tempfile.TemporaryDirectory() as temp:
             assets = Path(temp) / "assets"

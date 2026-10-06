@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 
 from PySide6.QtCore import QLockFile, QObject, QStandardPaths, QTimer, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
 from .autostart import Autostart
@@ -48,6 +48,22 @@ def app_icon() -> QIcon:
 
 
 def tray_icon() -> QIcon:
+    if sys.platform == "darwin":
+        path = icon_path("tray-icon-mac.png")
+        image = QImage(str(path))
+        if not image.isNull():
+            # macOS templates use alpha, not black/white pixel colors. Convert
+            # white artwork/background to transparent while retaining black ink.
+            image = image.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio,
+                                 Qt.TransformationMode.SmoothTransformation).convertToFormat(QImage.Format.Format_ARGB32)
+            for y in range(image.height()):
+                for x in range(image.width()):
+                    color = image.pixelColor(x, y)
+                    alpha = round((255 - color.lightness()) * color.alpha() / 255)
+                    image.setPixelColor(x, y, QColor(0, 0, 0, alpha))
+            icon = QIcon(QPixmap.fromImage(image))
+            icon.setIsMask(True)
+            return icon
     path = icon_path("tray-icon.png")
     if path.is_file():
         icon = QIcon(str(path))
