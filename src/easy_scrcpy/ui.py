@@ -53,6 +53,7 @@ class ControlWindow(QWidget):
     custom_quality_requested = Signal(str)
     wireless_requested = Signal()
     orientation_requested = Signal(str, int)
+    hidden_to_tray = Signal()
 
     def __init__(self, icon: QIcon):
         super().__init__()
@@ -190,6 +191,7 @@ class ControlWindow(QWidget):
     def closeEvent(self, event: QCloseEvent):
         if self.tray_available:
             self.hide()
+            self.hidden_to_tray.emit()
             event.ignore()
         else:
             event.ignore()
