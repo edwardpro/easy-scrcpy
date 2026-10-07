@@ -1,12 +1,12 @@
 from dataclasses import replace
 
 from PySide6.QtCore import Signal, Qt, QSize, QProcess, QTimer
-from PySide6.QtGui import QCloseEvent, QIcon
+from PySide6.QtGui import QCloseEvent, QIcon, QColor
 from PySide6.QtWidgets import (
     QCheckBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout,
     QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton,
     QTabWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
-    QAbstractItemView, QHeaderView, QComboBox, QToolButton, QStyle,
+    QAbstractItemView, QHeaderView, QComboBox, QToolButton, QStyle, QGraphicsDropShadowEffect,
 )
 
 from .core import (Settings, resolve_executable, QUALITY_LABELS, device_quality, ORIENTATION_OPTIONS,
@@ -61,6 +61,33 @@ def orientation_combo(current):
     return combo
 
 
+def style_device_button(button):
+    button.setFixedSize(35, 35)
+    button.setIconSize(QSize(21, 21))
+    button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+    button.setStyleSheet("""
+        QToolButton { border: 0; border-radius: 8px; padding: 0;
+                      background-color: palette(button); }
+        QToolButton:hover { background-color: palette(midlight); }
+        QToolButton:pressed { background-color: palette(mid); }
+        QToolButton:disabled { background-color: palette(window); }
+    """)
+    shadow = QGraphicsDropShadowEffect(button)
+    shadow.setBlurRadius(8)
+    shadow.setOffset(0, 2)
+    shadow.setColor(QColor(0, 0, 0, 65))
+    button.setGraphicsEffect(shadow)
+
+
+def device_combo_cell(combo):
+    combo.setFixedHeight(35)
+    cell = QWidget()
+    layout = QHBoxLayout(cell)
+    layout.setContentsMargins(6, 6, 6, 6)
+    layout.addWidget(combo, alignment=Qt.AlignmentFlag.AlignVCenter)
+    return cell
+
+
 class ControlWindow(QWidget):
     start_requested = Signal(str)
     stop_requested = Signal(str)
@@ -98,9 +125,9 @@ class ControlWindow(QWidget):
         self.table.setHorizontalHeaderLabels(["设备", "序列号", "状态", "画质", "方向", "操作"])
         header = self.table.horizontalHeader()
         header.setMinimumSectionSize(72)
-        for column in (0, 1, 2):
+        for column in (0, 1):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.Stretch)
-        for column in (3, 4):
+        for column in (2, 3, 4):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
@@ -150,9 +177,7 @@ class ControlWindow(QWidget):
             label = tr("停止投屏" if running else "开始投屏")
             button = QToolButton()
             button.setObjectName("mirrorActionButton")
-            button.setFixedSize(40, 40)
-            button.setIconSize(QSize(24, 24))
-            button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+            style_device_button(button)
             icon = QIcon(str(icon_path("menu-stop-share.png" if running else "menu-start-share.png")))
             if icon.isNull():
                 icon = self.style().standardIcon(QStyle.StandardPixmap.SP_MediaStop if running else QStyle.StandardPixmap.SP_MediaPlay)
@@ -169,18 +194,16 @@ class ControlWindow(QWidget):
             layout.setSpacing(6)
             combo = QComboBox()
             combo.setMinimumWidth(150)
-            combo.setMinimumHeight(32)
+            combo.setFixedHeight(35)
             for profile, label in QUALITY_LABELS.items():
                 combo.addItem(tr(label), profile)
             combo.setCurrentIndex(combo.findData(quality["profile"]))
             combo.setToolTip(tr("画质参数：最大边长 {size}，{fps} FPS，{bitrate} Mbps", size=quality["max_size"] or tr("原始分辨率"), fps=quality["max_fps"], bitrate=quality["video_bit_rate"]))
             combo.activated.connect(lambda index, s=device.serial, c=combo: self.quality_requested.emit(s, c.itemData(index)))
-            layout.addWidget(combo)
+            layout.addWidget(combo, alignment=Qt.AlignmentFlag.AlignVCenter)
             edit = QToolButton()
             edit.setObjectName("qualityConfigButton")
-            edit.setFixedSize(40, 40)
-            edit.setIconSize(QSize(24, 24))
-            edit.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+            style_device_button(edit)
             config_icon = QIcon(str(icon_path("menu-config.png")))
             if config_icon.isNull():
                 config_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView)
@@ -188,22 +211,21 @@ class ControlWindow(QWidget):
             edit.setToolTip(tr("调整…"))
             edit.setAccessibleName(tr("自定义画质"))
             edit.clicked.connect(lambda checked=False, s=device.serial: self.custom_quality_requested.emit(s))
-            layout.addWidget(edit)
+            layout.addWidget(edit, alignment=Qt.AlignmentFlag.AlignVCenter)
             container.setEnabled(device.serial not in manager.stopping)
             self.table.setCellWidget(row, 3, container)
             orientation = orientation_combo(manager.settings.device_orientation.get(device.serial, 0))
             orientation.activated.connect(lambda index, s=device.serial, c=orientation: self.orientation_requested.emit(s, c.itemData(index)))
             orientation.setEnabled(device.serial not in manager.stopping)
-            self.table.setCellWidget(row, 4, orientation)
+            self.table.setCellWidget(row, 4, device_combo_cell(orientation))
             action_cell = QWidget()
             action_layout = QHBoxLayout(action_cell)
             action_layout.setContentsMargins(6, 6, 6, 6)
+            action_layout.setSpacing(8)
             if not device.usb:
                 disconnect = QToolButton()
                 disconnect.setObjectName("disconnectWirelessButton")
-                disconnect.setFixedSize(40, 40)
-                disconnect.setIconSize(QSize(24, 24))
-                disconnect.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+                style_device_button(disconnect)
                 disconnect_icon = QIcon(str(icon_path("menu-close-conn.png")))
                 if disconnect_icon.isNull():
                     disconnect_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_DialogCloseButton)
@@ -216,9 +238,7 @@ class ControlWindow(QWidget):
             action_layout.addWidget(button, alignment=Qt.AlignmentFlag.AlignCenter)
             input_button = QToolButton()
             input_button.setObjectName("keyboardSettingsButton")
-            input_button.setFixedSize(40, 40)
-            input_button.setIconSize(QSize(24, 24))
-            input_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+            style_device_button(input_button)
             input_icon = QIcon(str(icon_path("menu-kb-settings.png")))
             if input_icon.isNull():
                 input_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView)

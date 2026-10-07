@@ -6,7 +6,7 @@ from unittest.mock import patch
 from types import SimpleNamespace
 
 from PySide6.QtGui import QImage, QColor
-from PySide6.QtWidgets import QToolButton
+from PySide6.QtWidgets import QToolButton, QComboBox, QGraphicsDropShadowEffect, QHeaderView
 
 from easy_scrcpy.app import app_icon, tray_icon, icon_path
 from easy_scrcpy.core import Device, Settings
@@ -16,6 +16,33 @@ from test_qt import APP
 
 
 class IconTests(unittest.TestCase):
+    def test_device_row_controls_align_without_clipping(self):
+        window = ControlWindow(app_icon())
+        manager = SimpleNamespace(processes={}, stopping=set(), settings=Settings())
+        try:
+            window.update_devices([Device("demo", "device")], manager)
+            window.show()
+            APP.processEvents()
+            self.assertEqual(window.table.horizontalHeader().sectionResizeMode(2),
+                             QHeaderView.ResizeMode.ResizeToContents)
+            controls = []
+            for column in (3, 4, 5):
+                cell = window.table.cellWidget(0, column)
+                controls.extend(cell.findChildren(QToolButton))
+                controls.extend(cell.findChildren(QComboBox))
+            centers = []
+            for control in controls:
+                self.assertEqual(control.height(), 35)
+                centers.append(control.mapTo(window.table.viewport(), control.rect().center()).y())
+                if isinstance(control, QToolButton):
+                    self.assertIsInstance(control.graphicsEffect(), QGraphicsDropShadowEffect)
+                    self.assertGreater(control.graphicsEffect().blurRadius(), 0)
+            self.assertLessEqual(max(centers) - min(centers), 1)
+            self.assertGreaterEqual(window.table.rowHeight(0), 56)
+        finally:
+            window.hide()
+            window.deleteLater()
+
     def test_keyboard_icon_preserves_target_translations_and_enabled_state(self):
         window = ControlWindow(app_icon())
         manager = SimpleNamespace(processes={}, stopping=set(), settings=Settings())
@@ -35,8 +62,8 @@ class IconTests(unittest.TestCase):
                     self.assertEqual(button.text(), "")
                     self.assertEqual(button.toolTip(), tr("键盘输入…"))
                     self.assertEqual(button.accessibleName(), tr("键盘输入…"))
-                    self.assertEqual((button.width(), button.height()), (40, 40))
-                    self.assertEqual((button.iconSize().width(), button.iconSize().height()), (24, 24))
+                    self.assertEqual((button.width(), button.height()), (35, 35))
+                    self.assertEqual((button.iconSize().width(), button.iconSize().height()), (21, 21))
                     self.assertEqual(button.isEnabled(), device.state == "device")
                     button.click()
             self.assertEqual(requested, ["usb", "wifi"] * len(LANGUAGES))
@@ -70,8 +97,8 @@ class IconTests(unittest.TestCase):
                     self.assertEqual(button.text(), "")
                     self.assertEqual(button.toolTip(), tr("断开无线连接"))
                     self.assertEqual(button.accessibleName(), tr("断开无线连接"))
-                    self.assertEqual((button.width(), button.height()), (40, 40))
-                    self.assertEqual((button.iconSize().width(), button.iconSize().height()), (24, 24))
+                    self.assertEqual((button.width(), button.height()), (35, 35))
+                    self.assertEqual((button.iconSize().width(), button.iconSize().height()), (21, 21))
                     self.assertGreaterEqual(window.table.rowHeight(row), 56)
                     button.click()
                     self.assertEqual(requested[-1], serial)
@@ -99,9 +126,9 @@ class IconTests(unittest.TestCase):
                 self.assertEqual(button.text(), "")
                 self.assertEqual(button.toolTip(), label)
                 self.assertEqual(button.accessibleName(), label)
-                self.assertEqual(button.width(), 40)
-                self.assertEqual(button.height(), 40)
-                self.assertEqual(button.iconSize().width(), 24)
+                self.assertEqual(button.width(), 35)
+                self.assertEqual(button.height(), 35)
+                self.assertEqual(button.iconSize().width(), 21)
                 self.assertGreaterEqual(window.table.rowHeight(0), 56)
                 button.click()
             self.assertEqual(stopped, ["a", "a"])
