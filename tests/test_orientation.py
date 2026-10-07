@@ -9,6 +9,7 @@ from easy_scrcpy.app import Controller
 from easy_scrcpy.core import Device, Settings, ORIENTATION_OPTIONS, scrcpy_arguments
 from easy_scrcpy.i18n import set_language, tr
 from easy_scrcpy.monitor import DeviceMonitor
+from PySide6.QtWidgets import QComboBox
 from easy_scrcpy.ui import orientation_combo
 from test_qt import APP
 
@@ -68,7 +69,7 @@ class OrientationTests(unittest.TestCase):
                 self.assertEqual(controller.window.table.horizontalHeaderItem(4).text(), "方向")
                 controller.select_orientation("a", 90)
                 self.assertEqual(Settings.load(controller.config_path).device_orientation, {"a": 90})
-                combo = controller.window.table.cellWidget(0, 4)
+                combo = controller.window.table.cellWidget(0, 4).findChild(QComboBox)
                 self.assertEqual(combo.currentData(), 90)
                 controller.select_orientation("a", 45)
                 self.assertEqual(Settings.load(controller.config_path).device_orientation, {"a": 90})
@@ -81,7 +82,7 @@ class OrientationTests(unittest.TestCase):
                         controller.manager.processes = {}
                 settings = replace(Settings.load(controller.config_path), language="en")
                 controller.apply_settings(settings)
-                combo = controller.window.table.cellWidget(0, 4)
+                combo = controller.window.table.cellWidget(0, 4).findChild(QComboBox)
                 self.assertEqual(combo.currentData(), 180)
                 self.assertEqual(combo.itemText(combo.findData(0)), tr("默认"))
                 self.assertEqual(combo.toolTip(),

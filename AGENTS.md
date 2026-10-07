@@ -99,7 +99,7 @@ uv run --extra build python packaging/update_scrcpy.py --version 5.0 --all-targe
 - 新增用户可见文字必须补齐五种语言及占位符一致性测试；ADB / scrcpy 原始输出和历史日志无需翻译。
 - 配置向后兼容，新增字段有默认值、类型和范围验证；原子保存，读取失败不覆盖原文件。
 - 参数控件使用预设下拉选项，不恢复自由数值输入；旧有效值可保留为额外选项。
-- Start、Stop、画质配置图标按钮为 40×40，图标 24×24，居中，设备行至少 56 px；保留多语言 tooltip 和 accessible name，不让图标溢出。
+- 设备行图标按钮为 35×35，图标 21×21，圆角无边框并带轻微阴影，下拉框同高且居中，设备行至少 56 px；保留多语言 tooltip 和 accessible name，不让图标溢出。
 - 主界面关闭后常驻托盘；托盘不可用时保留窗口。平台通知失败不得导致应用启动失败。
 - macOS 托盘使用单色 `tray-icon-mac.png` 模板，其他平台用彩色 `tray-icon.png`；应用大图标单独使用 `icon.png`。
 - 新资源通过统一路径辅助函数定位，并确认包含在 PyInstaller 包内；勿依赖当前 shell 工作目录。
